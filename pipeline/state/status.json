@@ -78,7 +78,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F006-kdf": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.332,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-231413-generator-agent_F006-kdf",
+          "gate_log": ".pipeline/runs/20261106-231651-gate-agent_F006-kdf/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-231734-evaluator-agent_F006-kdf",
+          "evaluator_summary": "Adds crypto::kdf with KdfParams (DEFAULT/MIN/cfg-gated FAST_FOR_TESTS, validate, validate_strict), NFKC password normalization returning a zeroizing SecretVec, a separate creation-path length check counted after NFKC, and argon2id() using Argon2id v0x13 with no secret/AD, 32-byte output wrapped in SecretBytes. Params are validated before Argon2 allocates. argon2 (alloc, zeroize; no parallel) and unicode-normalization are on the approved list. I ran the kdf tests with --all-features (13 pass) and a plain build; code matches CS 3.1, 3.3 and 10. No blocker or major findings.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 5.4916
+  "total_cost_usd": 5.8236
 }
