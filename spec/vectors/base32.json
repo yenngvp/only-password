@@ -1,0 +1,36 @@
+{
+  "source": "https://www.rfc-editor.org/rfc/rfc4648.txt",
+  "document": "RFC 4648",
+  "section": "10. Test Vectors (BASE32 rows)",
+  "note": "Encoded values include '=' padding as published. TOTP secrets in onlypassword are accepted without padding too; see crypto-spec.md.",
+  "vectors": [
+    {
+      "input_ascii": "",
+      "encoded": ""
+    },
+    {
+      "input_ascii": "f",
+      "encoded": "MY======"
+    },
+    {
+      "input_ascii": "fo",
+      "encoded": "MZXQ===="
+    },
+    {
+      "input_ascii": "foo",
+      "encoded": "MZXW6==="
+    },
+    {
+      "input_ascii": "foob",
+      "encoded": "MZXW6YQ="
+    },
+    {
+      "input_ascii": "fooba",
+      "encoded": "MZXW6YTB"
+    },
+    {
+      "input_ascii": "foobar",
+      "encoded": "MZXW6YTBOI======"
+    }
+  ]
+}

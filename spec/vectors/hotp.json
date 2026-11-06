@@ -1,0 +1,70 @@
+{
+  "source": "https://www.rfc-editor.org/rfc/rfc4226.txt",
+  "document": "RFC 4226",
+  "section": "Appendix D HOTP Algorithm: Test Values",
+  "secret_ascii": "12345678901234567890",
+  "secret_hex": "3132333435363738393031323334353637383930",
+  "digits": 6,
+  "vectors": [
+    {
+      "counter": 0,
+      "hmac_sha1": "cc93cf18508d94934c64b65d8ba7667fb7cde4b0",
+      "truncated_decimal": 1284755224,
+      "hotp_6_digits": "755224"
+    },
+    {
+      "counter": 1,
+      "hmac_sha1": "75a48a19d4cbe100644e8ac1397eea747a2d33ab",
+      "truncated_decimal": 1094287082,
+      "hotp_6_digits": "287082"
+    },
+    {
+      "counter": 2,
+      "hmac_sha1": "0bacb7fa082fef30782211938bc1c5e70416ff44",
+      "truncated_decimal": 137359152,
+      "hotp_6_digits": "359152"
+    },
+    {
+      "counter": 3,
+      "hmac_sha1": "66c28227d03a2d5529262ff016a1e6ef76557ece",
+      "truncated_decimal": 1726969429,
+      "hotp_6_digits": "969429"
+    },
+    {
+      "counter": 4,
+      "hmac_sha1": "a904c900a64b35909874b33e61c5938a8e15ed1c",
+      "truncated_decimal": 1640338314,
+      "hotp_6_digits": "338314"
+    },
+    {
+      "counter": 5,
+      "hmac_sha1": "a37e783d7b7233c083d4f62926c7a25f238d0316",
+      "truncated_decimal": 868254676,
+      "hotp_6_digits": "254676"
+    },
+    {
+      "counter": 6,
+      "hmac_sha1": "bc9cd28561042c83f219324d3c607256c03272ae",
+      "truncated_decimal": 1918287922,
+      "hotp_6_digits": "287922"
+    },
+    {
+      "counter": 7,
+      "hmac_sha1": "a4fb960c0bc06e1eabb804e5b397cdc4b45596fa",
+      "truncated_decimal": 82162583,
+      "hotp_6_digits": "162583"
+    },
+    {
+      "counter": 8,
+      "hmac_sha1": "1b3c89f65e6c9e883012052823443f048b4332db",
+      "truncated_decimal": 673399871,
+      "hotp_6_digits": "399871"
+    },
+    {
+      "counter": 9,
+      "hmac_sha1": "1637409809a679dc698207310c8c7fc07290d9e5",
+      "truncated_decimal": 645520489,
+      "hotp_6_digits": "520489"
+    }
+  ]
+}

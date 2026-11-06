@@ -1,0 +1,17 @@
+# Direct dependencies generator agents may use (workspace and dev). Nothing else.
+# Versions are chosen by the generator; Cargo.lock is committed. Features: enable only what is needed.
+argon2                # Argon2id password hashing (RFC 9106); core
+chacha20poly1305      # XChaCha20-Poly1305 AEAD; core
+hkdf                  # HKDF-SHA-256 (RFC 5869); core
+sha2                  # SHA-256 for HKDF and file binding; SHA-512 for TOTP; core
+sha1                  # SHA-1 for HMAC-SHA-1 in HOTP/TOTP only; core
+hmac                  # HMAC for HOTP/TOTP only; core
+zeroize               # zeroize-on-drop for secrets (enable the derive feature); core and cli
+getrandom             # operating-system random source; core
+serde                 # derive for item and export JSON (enable the derive feature); core
+serde_json            # JSON for item plaintext, export payload and test vector loading; core and dev
+unicode-normalization # NFKC normalization of passwords before Argon2id; core
+bip39                 # English 2048-word list for passphrases (CC0; eff-wordlist is AGPL and fails cargo-deny); core
+hex                   # hex encoding of item IDs and decoding of test vectors; core
+rpassword             # no-echo password prompt; cli only
+tempfile              # temporary directories in tests; dev-dependency
