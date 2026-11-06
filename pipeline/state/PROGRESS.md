@@ -17,3 +17,7 @@ Merged 2026-11-06 after 1 attempt(s), $0.26. Evaluator: Adds rng module: fill_ra
 ## F004-base32: Base32 codec
 
 Merged 2026-11-06 after 1 attempt(s), $0.38. Evaluator: Adds onlypassword_core::base32 with encode (unpadded upper case), tolerant decode, decode_strict (rejects non-zero trailing bits), parse_totp_secret (10..=128 bytes), normalize_totp_secret and a lower-case strict hex codec. Errors are InvalidInput with a fixed message, there is no panic path in non-test code, and no dependency was added. I ran the 9 base32 tests and they pass. Every acceptance criterion has a test that can fail. Findings are minor only.
+
+## F005-aead-hkdf: AEAD and HKDF primitives with known-answer tests
+
+Merged 2026-11-06 after 1 attempt(s), $0.37. Evaluator: Adds crypto::aead (XChaCha20-Poly1305 via the approved crate, random 24-byte nonce per seal, AD argument, open maps every failure to Error::Authentication and returns a SecretVec), crypto::hkdf (extract+expand and expand-from-PRK, fixed 32-byte output, exact INFO labels matching CS §3.5) and a cfg(test) vector-loading helper with its own hex decoder. I ran cargo test (41 passed, including xchacha_kat, chacha_rfc8439_kat, rfc5869_kat, every_bit_flip_fails, nonces_differ_between_calls, the testutil missing/empty tests). KATs load spec/vectors via CARGO_MANIFEST_DIR; the deterministic-nonce path is private/cfg(test) only. Dependencies are all in approved-deps.txt. No blocker or major issues; only minor notes.

@@ -63,7 +63,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F005-aead-hkdf": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.3736,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-231056-generator-agent_F005-aead-hkdf",
+          "gate_log": ".pipeline/runs/20261106-231239-gate-agent_F005-aead-hkdf/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-231310-evaluator-agent_F005-aead-hkdf",
+          "evaluator_summary": "Adds crypto::aead (XChaCha20-Poly1305 via the approved crate, random 24-byte nonce per seal, AD argument, open maps every failure to Error::Authentication and returns a SecretVec), crypto::hkdf (extract+expand and expand-from-PRK, fixed 32-byte output, exact INFO labels matching CS \u00a73.5) and a cfg(test) vector-loading helper with its own hex decoder. I ran cargo test (41 passed, including xchacha_kat, chacha_rfc8439_kat, rfc5869_kat, every_bit_flip_fails, nonces_differ_between_calls, the testutil missing/empty tests). KATs load spec/vectors via CARGO_MANIFEST_DIR; the deterministic-nonce path is private/cfg(test) only. Dependencies are all in approved-deps.txt. No blocker or major issues; only minor notes.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 5.118
+  "total_cost_usd": 5.4916
 }
