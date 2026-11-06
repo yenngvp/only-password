@@ -9,13 +9,24 @@
     )
 )]
 
-fn main() {}
+//! The `onlypassword` command-line tool.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn workspace_builds_and_tests_run() {
-        let v: Result<u8, ()> = "1".parse::<u8>().map_err(|_| ());
-        assert_eq!(v.unwrap(), 1);
+mod args;
+mod cmd;
+mod error;
+mod keyfile;
+mod prompt;
+
+use std::ffi::OsString;
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
+    match cmd::run(argv) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("onlypassword: {}", e.message());
+            ExitCode::from(e.exit_code())
+        }
     }
 }
