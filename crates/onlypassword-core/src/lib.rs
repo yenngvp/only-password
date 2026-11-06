@@ -23,6 +23,7 @@ pub mod secret;
 pub mod storage;
 #[cfg(test)]
 mod testutil;
+pub mod totp;
 pub mod vault;
 
 pub use error::{Error, Result};
@@ -31,6 +32,7 @@ pub use item::{
     CustomField, Item, ItemId, ItemKind, TotpAlgorithm, TotpConfig, MAX_ITEM_PLAINTEXT,
 };
 pub use secret::{SecretBytes, SecretString, SecretVec};
+pub use totp::{hotp, totp, totp_for_item};
 pub use vault::{Clock, ItemSummary, StoredItem, SystemClock, Vault};
 
 #[cfg(test)]
