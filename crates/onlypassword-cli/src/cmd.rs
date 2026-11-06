@@ -1,12 +1,16 @@
 //! Command execution.
 
-use crate::args::{self, Command, Global, NotesSource};
+use crate::args::{self, Alg, Command, Global, ItemFlags, NotesSource};
 use crate::error::CliError;
 use crate::keyfile;
 use crate::prompt::Prompter;
+use onlypassword_core::base32::normalize_totp_secret;
 use onlypassword_core::crypto::kdf::{self, KdfParams};
 use onlypassword_core::crypto::keys::SecretKey;
-use onlypassword_core::{storage, Item, ItemId, ItemKind, SecretString, Vault};
+use onlypassword_core::{
+    generate_password, storage, CustomField, Item, ItemId, ItemKind, PasswordOptions, SecretString,
+    TotpAlgorithm, TotpConfig, Vault,
+};
 use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -35,6 +39,66 @@ pub fn run(argv: Vec<OsString>) -> Res<()> {
             };
             let id = vault.add(&Item::new_note(title, notes))?;
             out(&format!("{id}\n"))
+        }
+        Command::AddLogin { flags } => {
+            let notes_file = notes_file(&flags)?;
+            let mut vault = unlock(&g, &mut prompter)?;
+            let mut item = Item::new_login(flags.title.clone().unwrap_or_default());
+            item.username = flags.username.clone();
+            item.urls = flags.urls.clone();
+            let mut shown = None;
+            if flags.generate {
+                let pw = generate_password(&PasswordOptions::default())?;
+                if flags.show_secrets {
+                    shown = Some(pw.expose().to_string());
+                }
+                item.password = Some(pw);
+            } else {
+                item.password = Some(prompter.read("Password")?);
+            }
+            apply_prompted(&mut item, &flags, notes_file, &mut prompter)?;
+            let id = vault.add(&item)?;
+            let mut s = format!("{id}\n");
+            if let Some(p) = shown {
+                s.push_str(&format!("password: {p}\n"));
+            }
+            out(&s)
+        }
+        Command::Update { id, flags } => {
+            let id: ItemId = id.parse()?;
+            let notes_file = notes_file(&flags)?;
+            let mut vault = unlock(&g, &mut prompter)?;
+            let mut item = vault.get(&id)?.item;
+            if let Some(t) = &flags.title {
+                item.title = t.clone();
+            }
+            if let Some(u) = &flags.username {
+                item.username = Some(u.clone());
+            }
+            if flags.clear_username {
+                item.username = None;
+            }
+            if !flags.urls.is_empty() {
+                item.urls = flags.urls.clone();
+            }
+            if flags.clear_urls {
+                item.urls.clear();
+            }
+            if flags.clear_notes {
+                item.notes = SecretString::new(String::new());
+            }
+            if flags.clear_totp {
+                item.totp = None;
+            }
+            if flags.clear_fields {
+                item.fields.clear();
+            }
+            if flags.new_password {
+                item.password = Some(prompter.read("Password")?);
+            }
+            apply_prompted(&mut item, &flags, notes_file, &mut prompter)?;
+            vault.update(&id, &item)?;
+            out(&format!("updated {id}\n"))
         }
         Command::Get { id, show_secrets } => {
             let id: ItemId = id.parse()?;
@@ -70,6 +134,60 @@ fn unlock(g: &Global, p: &mut Prompter) -> Res<Vault> {
     let key = keyfile::read(&g.key_file)?;
     let pw = p.read("Master password")?;
     Ok(Vault::unlock(&g.vault, &pw, &key)?)
+}
+
+fn notes_file(f: &ItemFlags) -> Res<Option<SecretString>> {
+    match &f.notes {
+        Some(NotesSource::File(p)) => Ok(Some(read_notes_file(p)?)),
+        _ => Ok(None),
+    }
+}
+
+/// TOTP secret, notes and hidden values, in that prompt order (the item password comes
+/// before, in the caller). TOTP replaces the whole configuration; fields replace the list.
+fn apply_prompted(
+    item: &mut Item,
+    f: &ItemFlags,
+    notes_file: Option<SecretString>,
+    p: &mut Prompter,
+) -> Res<()> {
+    if let Some(t) = &f.totp {
+        let raw = p.read("TOTP secret")?;
+        item.totp = Some(TotpConfig {
+            secret: normalize_totp_secret(raw.expose())?,
+            algorithm: match t.algorithm {
+                Alg::Sha1 => TotpAlgorithm::Sha1,
+                Alg::Sha256 => TotpAlgorithm::Sha256,
+                Alg::Sha512 => TotpAlgorithm::Sha512,
+            },
+            digits: t.digits,
+            period: t.period,
+        });
+    }
+    match (&f.notes, notes_file) {
+        (Some(NotesSource::Prompt), _) => item.notes = p.read("Notes")?,
+        (_, Some(n)) => item.notes = n,
+        _ => {}
+    }
+    if !f.fields.is_empty() {
+        let mut fields = Vec::with_capacity(f.fields.len());
+        for spec in &f.fields {
+            let (value, hidden) = match &spec.value {
+                Some(v) => (SecretString::new(v.clone()), false),
+                None => (
+                    p.read(&format!("Value of hidden field {}", clean(&spec.name)))?,
+                    true,
+                ),
+            };
+            fields.push(CustomField {
+                name: spec.name.clone(),
+                value,
+                hidden,
+            });
+        }
+        item.fields = fields;
+    }
+    Ok(())
 }
 
 fn read_notes_file(path: &Path) -> Res<SecretString> {
