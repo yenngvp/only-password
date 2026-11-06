@@ -33,7 +33,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F003-rng": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.2638,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-230603-generator-agent_F003-rng",
+          "gate_log": ".pipeline/runs/20261106-230707-gate-agent_F003-rng/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-230722-evaluator-agent_F003-rng",
+          "evaluator_summary": "Adds rng module: fill_random, random_array::<N>, uniform(n) over an internal RandomSource trait whose only implementation is OsSource (getrandom::fill, errors mapped to Error::Rng). uniform uses from_be_bytes on 8 bytes and threshold n.wrapping_neg() % n exactly as architecture.md says; a width-generic reject_sample helper is tested with an exhaustive 8-bit source. Only getrandom was added (it is in approved-deps). I ran cargo test -p onlypassword-core: 17 passed. I read the diff and found no other randomness source, no unwrap/panic in non-test code, and no unsafe. Only minor test-quality notes remain.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 4.4694
+  "total_cost_usd": 4.7332
 }
