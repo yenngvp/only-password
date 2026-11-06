@@ -206,7 +206,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F014-vault-rekey": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.4452,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-000015-generator-agent_F014-vault-rekey",
+          "gate_log": ".pipeline/runs/20261107-000339-gate-agent_F014-vault-rekey/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-000502-evaluator-agent_F014-vault-rekey",
+          "evaluator_summary": "Adds change_master_password, rotate_vault_key and change_master_password_and_rotate_key through one private rekey(). It validates the new password and params first, then derives the current MK and unwraps the VK (Authentication on failure) and cross-checks it against the in-memory VK. It builds and re-parses the full image, writes atomically, and swaps in-memory state only after the write succeeds. Rotation opens each record and re-seals it with fresh IK and nonces, keeping revision and timestamps. The combined op wraps the new VK under the new MK. vault_id and SK are unchanged. This matches crypto-spec 6.5. I ran the 9 rekey tests and they pass; the rest is from reading the code. The only issues are minor.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 9.1667
+  "total_cost_usd": 9.6119
 }
