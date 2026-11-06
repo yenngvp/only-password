@@ -12,9 +12,12 @@
 //! Core library of onlypassword.
 
 pub mod base32;
+pub mod crypto;
 pub mod error;
 pub mod rng;
 pub mod secret;
+#[cfg(test)]
+mod testutil;
 
 pub use error::{Error, Result};
 pub use secret::{SecretBytes, SecretString, SecretVec};
