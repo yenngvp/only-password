@@ -452,4 +452,6 @@ mod item_tests;
 #[cfg(test)]
 mod rekey_tests;
 #[cfg(test)]
+mod robustness_tests;
+#[cfg(test)]
 mod tests;
