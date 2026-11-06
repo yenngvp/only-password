@@ -7,3 +7,6 @@ publish = false
 [features]
 insecure-fast-kdf = []
 test-hooks = []
+
+[dependencies]
+zeroize = { version = "1", features = ["derive"] }
