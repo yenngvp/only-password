@@ -163,7 +163,11 @@ pub(crate) fn seal_record(
 
 /// Decrypt a record: `Authentication` for any AEAD failure (including a changed
 /// `item_schema`), then JSON pass 1/2 per CS §7/§9.
-fn open_record(k_iw: &ItemWrapKey, vault_id: &[u8; 16], rec: &Record) -> Result<(Item, u64, u64)> {
+pub(crate) fn open_record(
+    k_iw: &ItemWrapKey,
+    vault_id: &[u8; 16],
+    rec: &Record,
+) -> Result<(Item, u64, u64)> {
     let ik_bytes = aead::open(
         &aead_key(k_iw.expose()),
         &rec.key_nonce,
