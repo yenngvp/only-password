@@ -161,7 +161,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F011-storage": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.284,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-234410-generator-agent_F011-storage",
+          "gate_log": ".pipeline/runs/20261106-234626-gate-agent_F011-storage/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-234722-evaluator-agent_F011-storage",
+          "evaluator_summary": "Adds storage.rs with write_atomic (temp file via create_new, 0600, sync_all, rename, dir fsync, symlink resolved first, temp removed on failure), create_new_atomic (hard_link, no rename fallback, pub(crate) hook), read_bounded (metadata check plus take(max+1)), and same_file_path (canonical, canonical parent plus name when missing). It follows CS 6.6. tempfile is on the approved list and used only as a dev-dependency. I ran the 12 storage tests as a non-root user (uid 1000) and all pass, so the unwritable-directory test really exercises the failure path. clippy is clean. No crypto or secret handling is involved. Remaining issues are minor.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 7.985
+  "total_cost_usd": 8.269
 }
