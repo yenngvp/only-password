@@ -146,7 +146,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F010-seal": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.5868,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-233622-generator-agent_F010-seal",
+          "gate_log": ".pipeline/runs/20261106-234119-gate-agent_F010-seal/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-234220-evaluator-agent_F010-seal",
+          "evaluator_summary": "Adds crates/onlypassword-core/src/seal.rs: wrap_vk/unwrap_vk (AD_VK = label || 82-byte header prefix), seal_item/open_record (fresh IK, nonces, AD_IK/AD_BODY per CS 6.3), compute/verify_trailer (AEAD over SHA-256 of file prefix with K_fa, CS 6.4), build_image, and open_vault. Records can only be opened through OpenedVault, which open_vault constructs only after unwrap and trailer verification, so no record is decrypted before the trailer passes. Labels, field order and widths match the spec by reading, and the independent-AD test confirms them with the chacha20poly1305 crate directly. Error ordering matches CS 9 steps 8-12: the AEAD failure comes first, then JSON schema != 1 gives UnsupportedVersion, then a record/JSON schema mismatch gives Corrupt. I ran cargo test (all 95 core tests plus the others pass, including the 9 seal tests) and cargo clippy --all-targets (clean). Only minor issues remain.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 7.3982
+  "total_cost_usd": 7.985
 }
