@@ -311,7 +311,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F021-cli-advanced": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.7114,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-004510-generator-agent_F021-cli-advanced",
+          "gate_log": ".pipeline/runs/20261107-005019-gate-agent_F021-cli-advanced/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-005145-evaluator-agent_F021-cli-advanced",
+          "evaluator_summary": "Adds passwd [--rotate], rotate-key, export, import, totp and generate (password/passphrase) to the CLI, delegating to the core (change_master_password[_and_rotate_key], rotate_vault_key, export/import, totp_for_item, generators). Prompt order matches architecture.md section 5. Parsing is hand-written with range checks that map to exit 2; export --out is compared to the vault via storage::same_file_path before any prompt. No crypto code is added and no secrets are printed except the deliberate generate/totp output. The only new dependency is serde_json as a dev-dependency, which is on the approved list. I ran `cargo test -p onlypassword-cli`: all tests passed (9 unit, 16 e2e, 12 new e2e_advanced). The remaining checks are from reading the code and tests.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 12.7991
+  "total_cost_usd": 13.5105
 }
