@@ -7,3 +7,12 @@ publish = false
 [[bin]]
 name = "onlypassword"
 path = "src/main.rs"
+
+[dependencies]
+onlypassword-core = { path = "../onlypassword-core" }
+rpassword = "7"
+zeroize = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
+onlypassword-core = { path = "../onlypassword-core" }
