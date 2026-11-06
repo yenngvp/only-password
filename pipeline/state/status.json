@@ -176,7 +176,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F012-vault-open": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.3725,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-234834-generator-agent_F012-vault-open",
+          "gate_log": ".pipeline/runs/20261106-235104-gate-agent_F012-vault-open/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-235214-evaluator-agent_F012-vault-open",
+          "evaluator_summary": "Adds Clock/SystemClock and Vault::{create, create_with_key, unlock, lock, kdf_params, set_clock (cfg(test)/test-hooks, doc(hidden))}. Creation checks the password (8 NFKC scalars) and KdfParams::validate before any disk access, builds the image via seal::wrap_vk/build_image, and publishes through storage::create_new_atomic_with (hard link, never replaces). Unlock follows CS 9 order (read_bounded, parse, derive MK, open_vault which unwraps VK and verifies the trailer) with no password minimum; wrong password and wrong key both give Authentication. Vault Debug is redacted and keys are ZeroizeOnDrop types. I ran `cargo test -p onlypassword-core vault`: all 14 tests pass, including the every-offset flipped-byte loop. Other points were concluded from reading the code. Only minor issues remain.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 8.269
+  "total_cost_usd": 8.6415
 }
