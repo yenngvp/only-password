@@ -15,6 +15,7 @@ pub mod base32;
 pub mod crypto;
 pub mod error;
 pub mod format;
+pub mod generator;
 pub mod item;
 pub mod rng;
 pub mod seal;
@@ -25,6 +26,7 @@ mod testutil;
 pub mod vault;
 
 pub use error::{Error, Result};
+pub use generator::{generate_password, PasswordOptions};
 pub use item::{
     CustomField, Item, ItemId, ItemKind, TotpAlgorithm, TotpConfig, MAX_ITEM_PLAINTEXT,
 };
