@@ -13,6 +13,8 @@ pub const RECORD_FIXED_LEN: usize = 126;
 pub const TRAILER_LEN: usize = 40;
 pub const MAX_RECORDS: u32 = 100_000;
 pub const MAX_VAULT_FILE: usize = 536_870_912;
+/// Largest export payload (CS §10): 1 GiB.
+pub const MAX_EXPORT_PLAINTEXT: usize = 1_073_741_824;
 const MIN_FILE: usize = HEADER_LEN + 4 + TRAILER_LEN;
 const TAG: usize = 16;
 const MAX_BODY_CT: usize = MAX_ITEM_PLAINTEXT + TAG;

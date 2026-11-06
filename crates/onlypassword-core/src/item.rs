@@ -9,7 +9,7 @@ use std::str::FromStr;
 use zeroize::Zeroizing;
 
 /// Maximum serialized item plaintext (CS §10).
-struct CountingWriter(usize);
+pub(crate) struct CountingWriter(pub(crate) usize);
 
 impl std::io::Write for CountingWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -199,7 +199,23 @@ impl Item {
         if updated_ms < created_ms {
             return Err(inv("timestamps"));
         }
-        let w = WireOut {
+        let w = self.wire_out(created_ms, updated_ms);
+        // First pass: exact length via a counting sink, so the real buffer is
+        // allocated once and never reallocated (no stray plaintext copies).
+        let mut counter = CountingWriter(0);
+        serde_json::to_writer(&mut counter, &w).map_err(|_| inv("serialize"))?;
+        if counter.0 > MAX_ITEM_PLAINTEXT {
+            return Err(Error::LimitExceeded);
+        }
+        let mut out = Zeroizing::new(Vec::with_capacity(counter.0));
+        serde_json::to_writer(&mut *out, &w).map_err(|_| inv("serialize"))?;
+        debug_assert_eq!(out.len(), counter.0);
+        Ok(out)
+    }
+
+    /// Borrowed wire form of this (already validated) item.
+    pub(crate) fn wire_out(&self, created_ms: u64, updated_ms: u64) -> WireOut<'_> {
+        WireOut {
             schema: 1,
             kind: self.kind,
             title: &self.title,
@@ -224,18 +240,7 @@ impl Item {
                     hidden: f.hidden,
                 })
                 .collect(),
-        };
-        // First pass: exact length via a counting sink, so the real buffer is
-        // allocated once and never reallocated (no stray plaintext copies).
-        let mut counter = CountingWriter(0);
-        serde_json::to_writer(&mut counter, &w).map_err(|_| inv("serialize"))?;
-        if counter.0 > MAX_ITEM_PLAINTEXT {
-            return Err(Error::LimitExceeded);
         }
-        let mut out = Zeroizing::new(Vec::with_capacity(counter.0));
-        serde_json::to_writer(&mut *out, &w).map_err(|_| inv("serialize"))?;
-        debug_assert_eq!(out.len(), counter.0);
-        Ok(out)
     }
 
     /// Parse and validate a schema-1 plaintext; returns the item and
@@ -250,6 +255,14 @@ impl Item {
             return Err(Error::UnsupportedVersion);
         }
         let w: WireIn = serde_json::from_slice(bytes).map_err(|_| Error::Corrupt("item json"))?;
+        Item::from_wire(w)
+    }
+
+    /// Apply the §7 rules to a strictly parsed wire item whose `schema` was already probed.
+    pub(crate) fn from_wire(w: WireIn) -> Result<(Item, u64, u64)> {
+        if w.schema != 1 {
+            return Err(Error::UnsupportedVersion);
+        }
         if w.updated_ms < w.created_ms {
             return Err(Error::Corrupt("timestamps"));
         }
@@ -285,7 +298,7 @@ impl Item {
 // ---- wire types ----
 
 #[derive(Serialize)]
-struct WireOut<'a> {
+pub(crate) struct WireOut<'a> {
     schema: u32,
     kind: ItemKind,
     title: &'a str,
@@ -389,14 +402,14 @@ where
 }
 
 #[derive(Deserialize)]
-struct Probe {
-    schema: i64,
+pub(crate) struct Probe {
+    pub(crate) schema: i64,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
-struct WireIn {
+pub(crate) struct WireIn {
     schema: u32,
     kind: ItemKind,
     title: String,

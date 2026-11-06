@@ -6,6 +6,7 @@ use crate::format::{Record, VaultFile, MAX_RECORDS, MAX_VAULT_FILE};
 use crate::item::{Item, ItemId, ItemKind};
 use crate::secret::SecretString;
 use crate::{rng, seal, storage, Error, Result};
+mod export;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -444,6 +445,8 @@ impl Vault {
     }
 }
 
+#[cfg(test)]
+mod export_tests;
 #[cfg(test)]
 mod item_tests;
 #[cfg(test)]
