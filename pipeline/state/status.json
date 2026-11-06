@@ -221,7 +221,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F015-generator-password": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.3115,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-000625-generator-agent_F015-generator-password",
+          "gate_log": ".pipeline/runs/20261107-000940-gate-agent_F015-generator-password/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-001105-evaluator-agent_F015-generator-password",
+          "evaluator_summary": "Adds generator.rs with PasswordOptions (default 20 chars, all classes, require_each on), generate_password (OS source via a new pub(crate) os_source helper) and pub(crate) generate_password_with(&mut dyn RandomSource,..). It follows architecture.md: per-class picks when require_each, fill from the union, Fisher-Yates shuffle, all draws through the existing rejection-sampling uniform_with. The working buffer is Zeroizing and the result is a SecretString. I ran the 13 generator tests and they pass. All acceptance criteria are met; only minor observations remain. No spec deviations, no unsafe, no new dependencies, no spec-issues or dep-requests entries needed.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 9.6119
+  "total_cost_usd": 9.9234
 }
