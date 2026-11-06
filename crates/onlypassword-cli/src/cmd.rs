@@ -8,8 +8,8 @@ use onlypassword_core::base32::normalize_totp_secret;
 use onlypassword_core::crypto::kdf::{self, KdfParams};
 use onlypassword_core::crypto::keys::SecretKey;
 use onlypassword_core::{
-    generate_password, storage, CustomField, Item, ItemId, ItemKind, PasswordOptions, SecretString,
-    TotpAlgorithm, TotpConfig, Vault,
+    generate_passphrase, generate_password, storage, CustomField, Item, ItemId, ItemKind,
+    PassphraseOptions, PasswordOptions, SecretString, TotpAlgorithm, TotpConfig, Vault,
 };
 use std::ffi::OsString;
 use std::io::{Read, Write};
@@ -113,6 +113,98 @@ pub fn run(argv: Vec<OsString>) -> Res<()> {
         Command::Search { query } => {
             let vault = unlock(&g, &mut prompter)?;
             out(&render_summaries(&vault.search(&query)?))
+        }
+        Command::Passwd { rotate } => {
+            let key = keyfile::read(&g.key_file)?;
+            let pw = prompter.read("Master password")?;
+            let mut vault = Vault::unlock(&g.vault, &pw, &key)?;
+            let new_pw = prompter.read_confirmed("New master password")?;
+            if rotate {
+                vault.change_master_password_and_rotate_key(
+                    &pw,
+                    &key,
+                    &new_pw,
+                    KdfParams::DEFAULT,
+                )?;
+                out("master password changed and vault key rotated\n")
+            } else {
+                vault.change_master_password(&pw, &key, &new_pw, KdfParams::DEFAULT)?;
+                out("master password changed; the vault key was NOT rotated (use passwd --rotate or rotate-key)\n")
+            }
+        }
+        Command::RotateKey => {
+            let key = keyfile::read(&g.key_file)?;
+            let pw = prompter.read("Master password")?;
+            let mut vault = Vault::unlock(&g.vault, &pw, &key)?;
+            vault.rotate_vault_key(&pw, &key)?;
+            out("vault key rotated\n")
+        }
+        Command::Export { out: path } => {
+            match storage::same_file_path(&path, &g.vault) {
+                Ok(false) => {}
+                Ok(true) => return Err(CliError::Usage("--out must not be the vault file")),
+                Err(_) => return Err(CliError::Failure("cannot resolve --out path")),
+            }
+            let vault = unlock(&g, &mut prompter)?;
+            let key = keyfile::read(&g.key_file)?;
+            let xpw = prompter.read_confirmed("Export password")?;
+            vault.export(&path, &xpw, &key, KdfParams::DEFAULT)?;
+            out("exported\n")
+        }
+        Command::Import {
+            input,
+            source_key_file,
+        } => {
+            let source = keyfile::read(&source_key_file)?;
+            let mut vault = unlock(&g, &mut prompter)?;
+            let xpw = prompter.read("Export password")?;
+            let n = vault.import(&input, &xpw, &source)?;
+            out(&format!("imported {n} items\n"))
+        }
+        Command::Totp { id, time } => {
+            let id: ItemId = id.parse()?;
+            let vault = unlock(&g, &mut prompter)?;
+            let item = vault.get(&id)?.item;
+            let Some(cfg) = item.totp else {
+                return Err(CliError::Failure("item has no TOTP secret"));
+            };
+            let now = match time {
+                Some(t) => t,
+                None => std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|_| CliError::Failure("system clock is before 1970"))?
+                    .as_secs(),
+            };
+            let code = onlypassword_core::totp_for_item(&cfg, now)?;
+            let period = u64::from(cfg.period.max(1));
+            let remaining = period - now % period;
+            out(&format!("{code}\n{remaining} seconds remaining\n"))
+        }
+        Command::GenPassword(o) => {
+            let pw = generate_password(&PasswordOptions {
+                length: o.length,
+                lower: o.lower,
+                upper: o.upper,
+                digits: o.digits,
+                symbols: o.symbols,
+                exclude_ambiguous: o.exclude_ambiguous,
+                ..PasswordOptions::default()
+            })?;
+            out(&format!("{}\n", pw.expose()))
+        }
+        Command::GenPassphrase {
+            words,
+            separator,
+            capitalize,
+            digit,
+        } => {
+            let pw = generate_passphrase(&PassphraseOptions {
+                words,
+                separator,
+                capitalize,
+                include_digit: digit,
+            })?;
+            out(&format!("{}\n", pw.expose()))
         }
         Command::Delete { id } => {
             let id: ItemId = id.parse()?;
