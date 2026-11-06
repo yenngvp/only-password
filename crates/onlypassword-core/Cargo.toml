@@ -25,3 +25,4 @@ bip39 = { version = "2", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
+onlypassword-core = { path = ".", features = ["insecure-fast-kdf"] }

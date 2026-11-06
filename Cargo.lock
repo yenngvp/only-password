@@ -296,6 +296,7 @@ dependencies = [
  "getrandom",
  "hkdf",
  "hmac",
+ "onlypassword-core",
  "serde",
  "serde_json",
  "sha1",
