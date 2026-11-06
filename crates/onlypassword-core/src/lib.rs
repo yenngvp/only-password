@@ -19,6 +19,7 @@ pub mod item;
 pub mod rng;
 pub mod seal;
 pub mod secret;
+pub mod storage;
 #[cfg(test)]
 mod testutil;
 
