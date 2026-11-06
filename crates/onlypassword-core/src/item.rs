@@ -9,6 +9,18 @@ use std::str::FromStr;
 use zeroize::Zeroizing;
 
 /// Maximum serialized item plaintext (CS §10).
+struct CountingWriter(usize);
+
+impl std::io::Write for CountingWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0 += buf.len();
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 pub const MAX_ITEM_PLAINTEXT: usize = 1_048_576;
 
 const MAX_TITLE: usize = 1024;
@@ -187,22 +199,6 @@ impl Item {
         if updated_ms < created_ms {
             return Err(inv("timestamps"));
         }
-        let mut sum = self.title.len() + self.notes.expose().len();
-        sum += self.username.as_ref().map_or(0, |s| s.len());
-        sum += self.password.as_ref().map_or(0, |s| s.expose().len());
-        sum += self.urls.iter().map(|u| u.len() + 3).sum::<usize>();
-        sum += self
-            .fields
-            .iter()
-            .map(|f| f.name.len() + f.value.expose().len() + 48)
-            .sum::<usize>();
-        sum += self
-            .totp
-            .as_ref()
-            .map_or(0, |t| t.secret.expose().len() + 64);
-        let cap = (sum + sum / 8 + 256).min(MAX_ITEM_PLAINTEXT + 4096);
-        let mut out = Zeroizing::new(Vec::with_capacity(cap));
-
         let w = WireOut {
             schema: 1,
             kind: self.kind,
@@ -229,10 +225,16 @@ impl Item {
                 })
                 .collect(),
         };
-        serde_json::to_writer(&mut *out, &w).map_err(|_| Error::Corrupt("serialize"))?;
-        if out.len() > MAX_ITEM_PLAINTEXT {
+        // First pass: exact length via a counting sink, so the real buffer is
+        // allocated once and never reallocated (no stray plaintext copies).
+        let mut counter = CountingWriter(0);
+        serde_json::to_writer(&mut counter, &w).map_err(|_| inv("serialize"))?;
+        if counter.0 > MAX_ITEM_PLAINTEXT {
             return Err(Error::LimitExceeded);
         }
+        let mut out = Zeroizing::new(Vec::with_capacity(counter.0));
+        serde_json::to_writer(&mut *out, &w).map_err(|_| inv("serialize"))?;
+        debug_assert_eq!(out.len(), counter.0);
         Ok(out)
     }
 
@@ -802,6 +804,14 @@ mod tests {
         let mut i = full();
         i.totp.as_mut().unwrap().secret = SecretString::new(String::from_utf8(enc).unwrap());
         invalid(&i);
+    }
+
+    #[test]
+    fn to_plaintext_buffer_is_exact_with_escapes() {
+        let mut i = full();
+        i.notes = SecretString::new("\u{1}\"\\\n".repeat(500));
+        let out = i.to_plaintext(1, 2).unwrap();
+        assert_eq!(out.capacity(), out.len());
     }
 
     #[test]

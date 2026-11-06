@@ -17,3 +17,6 @@ Decisions the spec left open:
   Nullable keys use `deserialize_with = "required"`, which makes an absent key an error (tested per key).
 - `Item` does not derive `ZeroizeOnDrop` itself: its secret members (`SecretString`) wipe on drop; title,
   username, URLs and field names are non-secret per architecture.md. `Item`/`SecretString` have no `Clone`/`PartialEq`.
+
+## Attempt 2
+to_plaintext now measures the exact JSON length with a counting writer, then allocates a Zeroizing<Vec> of exactly that capacity (no realloc, even with escapes). Serialize errors map to InvalidInput. Test: to_plaintext_buffer_is_exact_with_escapes.
