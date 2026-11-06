@@ -17,6 +17,10 @@ impl RandomSource for OsSource {
     }
 }
 
+pub(crate) fn os_source() -> impl RandomSource {
+    OsSource
+}
+
 /// Fill `buf` with OS random bytes.
 pub fn fill_random(buf: &mut [u8]) -> Result<()> {
     OsSource.fill(buf)
