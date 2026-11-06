@@ -14,6 +14,7 @@
 pub mod base32;
 pub mod crypto;
 pub mod error;
+pub mod format;
 pub mod item;
 pub mod rng;
 pub mod secret;
