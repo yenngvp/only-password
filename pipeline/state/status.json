@@ -48,7 +48,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F004-base32": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.3848,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-230804-generator-agent_F004-base32",
+          "gate_log": ".pipeline/runs/20261106-231003-gate-agent_F004-base32/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-231019-evaluator-agent_F004-base32",
+          "evaluator_summary": "Adds onlypassword_core::base32 with encode (unpadded upper case), tolerant decode, decode_strict (rejects non-zero trailing bits), parse_totp_secret (10..=128 bytes), normalize_totp_secret and a lower-case strict hex codec. Errors are InvalidInput with a fixed message, there is no panic path in non-test code, and no dependency was added. I ran the 9 base32 tests and they pass. Every acceptance criterion has a test that can fail. Findings are minor only.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 4.7332
+  "total_cost_usd": 5.118
 }
