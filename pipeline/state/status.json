@@ -191,7 +191,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F013-vault-items": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.5252,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-235349-generator-agent_F013-vault-items",
+          "gate_log": ".pipeline/runs/20261106-235713-gate-agent_F013-vault-items/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-235829-evaluator-agent_F013-vault-items",
+          "evaluator_summary": "Adds Vault::add/get/update/delete/list/search. Each mutation clones the record list, edits it, builds the full image via seal::build_image, checks the record and size limits, re-parses it, writes it atomically, and only then replaces in-memory state. update checks revision overflow before incrementing, keeps created_ms, uses max(now, created_ms), and re-seals with a new item key and nonces. ItemSummary carries no secret fields, and Debug on secrets is redacted. I ran cargo test: 131 passed, 0 failed. I ran as uid 1000, so the read-only-directory test really executes and is not skipped by its root guard. Every acceptance criterion has a test, except the u64::MAX revision case, which the criteria defer to F018; I judged that code correct by reading it only. Minor issues only.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 8.6415
+  "total_cost_usd": 9.1667
 }
