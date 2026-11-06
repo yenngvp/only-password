@@ -108,7 +108,30 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F008-item-model": {
+      "status": "passed",
+      "attempts": 2,
+      "cost_usd": 0.8239,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-232252-generator-agent_F008-item-model",
+          "gate_log": ".pipeline/runs/20261106-232605-gate-agent_F008-item-model/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-232707-evaluator-agent_F008-item-model",
+          "evaluator_summary": "Adds core::item (Item, ItemKind, TotpConfig, CustomField, ItemId, validate, to_plaintext/from_plaintext) with serde/serde_json. I ran the 13 item tests (all pass) and read the whole diff. Wire format, key order, two-pass read, deny_unknown_fields, required nullable keys, schema probe, limits, TOTP canonical rule and Debug redaction all match CS section 7 and are covered by tests that can fail. One real defect: the output buffer capacity is a heuristic (sum + sum/8 + 256) that is too small whenever strings need JSON escaping (control characters expand 6x as \\u00XX, quotes/backslashes 2x). serde_json then grows the Vec by realloc, leaving a copy of the plaintext (passwords, TOTP secret) in freed, un-zeroized heap memory. CS section 7 specifies a preallocated Zeroizing<Vec<u8>> precisely to avoid that, so REQ-SEC-002 is not met for such items. No test covers it.",
+          "outcome": "evaluator_rejected"
+        },
+        {
+          "attempt": 2,
+          "generator_run": ".pipeline/runs/20261106-232809-generator-agent_F008-item-model",
+          "gate_log": ".pipeline/runs/20261106-232949-gate-agent_F008-item-model/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-233045-evaluator-agent_F008-item-model",
+          "evaluator_summary": "Adds core::item: Item/ItemKind/TotpConfig/TotpAlgorithm/CustomField/ItemId, validate(), compact fixed-order schema-1 serialization into a Zeroizing<Vec> with exact preallocation (counting-writer pass), and two-pass reading (i64 schema probe without deny_unknown_fields, then strict deny_unknown_fields structs with deserialize_with 'required' for username/password/totp, no default/flatten). serde and serde_json are in approved-deps. I ran `cargo test -p onlypassword-core item`: 14/14 pass. By reading, the tests assert exact bytes, per-key missing rows (including the three nullable keys absent), duplicates at top level/totp/fields entry, schema 0/2 with unknown fields, canonical TOTP secret cases and Debug redaction. No blocker or major issues found; two spec-deviation notes the owner should see (LimitExceeded on oversize write; to_plaintext/from_plaintext carrying timestamps) are recorded in agent-notes/spec-issues.md.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 6.1811
+  "total_cost_usd": 7.005
 }
