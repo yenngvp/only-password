@@ -281,7 +281,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F019-cli-basic": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.7236,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-003126-generator-agent_F019-cli-basic",
+          "gate_log": ".pipeline/runs/20261107-003558-gate-agent_F019-cli-basic/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-003714-evaluator-agent_F019-cli-basic",
+          "evaluator_summary": "Adds the onlypassword binary: a hand-written exact-spelling parser (--flag=value forms and unknown flags are usage errors, non-UTF-8 argv is a usage error, no secret comes from argv or env), a prompt module (rpassword or bounded --stdin lines, constant-time confirm), static-text error mapping to exit codes 0/1/2/3, a key-file reader (4 KiB cap, from_key_file_text), and init/add-note/get/list/search/delete. init follows the section 5 order (checks, create_new+0600+sync_all, read-back constant-time compare, create_with_key, key-file removal on failure). get masks password, notes, TOTP secret and hidden fields. I ran cargo test -p onlypassword-cli (9 unit + 11 e2e, all pass) and probed the binary by hand: init gives 0600 key and vault, wrong password exits 3 with a one-line message, unknown id exits 1. Deps rpassword/zeroize/tempfile are approved. No blocker or major issues found.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 11.501
+  "total_cost_usd": 12.2246
 }
