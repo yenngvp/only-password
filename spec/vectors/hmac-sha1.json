@@ -1,0 +1,31 @@
+{
+  "source": "https://www.rfc-editor.org/rfc/rfc2202.txt",
+  "document": "RFC 2202",
+  "section": "3. Test Cases for HMAC-SHA-1 (cases 1-4; 5-7 omitted)",
+  "vectors": [
+    {
+      "case": 1,
+      "key": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "data": "4869205468657265",
+      "hmac_sha1": "b617318655057264e28bc0b6fb378c8ef146be00"
+    },
+    {
+      "case": 2,
+      "key": "4a656665",
+      "data": "7768617420646f2079612077616e7420666f72206e6f7468696e673f",
+      "hmac_sha1": "effcdf6ae5eb2fa2d27416d5f184df9c259a7c79"
+    },
+    {
+      "case": 3,
+      "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "data": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "hmac_sha1": "125d7342b9ac11cd91a39af48aa17b4f63f175d3"
+    },
+    {
+      "case": 4,
+      "key": "0102030405060708090a0b0c0d0e0f10111213141516171819",
+      "data": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "hmac_sha1": "4c9007f4026250c6bc8414f9bf50c86c2d7235da"
+    }
+  ]
+}

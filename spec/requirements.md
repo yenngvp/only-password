@@ -9,10 +9,10 @@ requirement is testable; `features.json` maps each one to a feature that tests i
 - **REQ-KEY-001** When a vault is created, the core shall generate a 256-bit secret key from the operating system's random source and return it to the caller, and shall not write it to the vault file.
 - **REQ-KEY-002** When a vault is unlocked, the core shall derive the master key from the NFKC-normalized master password with Argon2id (parameters read from the authenticated header) and combine it with the secret key through HKDF-SHA-256 exactly as in CS §3.3.
 - **REQ-KEY-003** When a vault is created or its master password is changed without explicit parameters, the core shall use Argon2id m = 65 536 KiB, t = 3, p = 4 (CS §10), and shall never default to a memory cost above 64 MiB.
-- **REQ-KEY-004** When asked to create or accept Argon2id parameters outside the bounds of CS §10, the core shall return an error before running Argon2id.
+- **REQ-KEY-004** When asked to create, or to open a file declaring, Argon2id parameters outside the bounds of CS §10 (floor m ≥ 19 456 KiB, t ≥ 2, p ≥ 1; ceiling m ≤ 262 144 KiB, t ≤ 16, p ≤ 16), the core shall return `InvalidInput` (creation) or `Corrupt` (file) before running Argon2id; only builds with `cfg(test)` or the non-default `insecure-fast-kdf` feature may accept lower values, and `KdfParams::validate_strict` always enforces the real floor.
 - **REQ-KEY-005** When the password or the secret key is wrong, the core shall return the single error `Authentication`, without indicating which of the two was wrong.
 - **REQ-KEY-006** When a secret key is formatted or parsed in text form, the core shall use the `OPSK1-` encoding of CS §3.2, and shall return `InvalidInput` for a wrong prefix, wrong length, invalid character or non-zero trailing bits.
-- **REQ-KEY-007** When a master password or export password shorter than 8 Unicode scalar values after normalization is supplied for creating a vault, changing the password or exporting, the core shall return `InvalidInput`.
+- **REQ-KEY-007** When a master password or export password shorter than 8 Unicode scalar values after normalization is supplied for creating a vault, changing the password or exporting, the core shall return `InvalidInput`; unlock and import shall not apply the minimum.
 - **REQ-KEY-008** The core shall not provide any recovery, reset, hint or backdoor path that decrypts a vault without both the master password and the secret key.
 
 ## HIER — key hierarchy
@@ -33,11 +33,13 @@ requirement is testable; `features.json` maps each one to a feature that tests i
 ## FMT — vault file and versions
 
 - **REQ-FMT-001** The core shall write and read vault files exactly as laid out in CS §5, in a single file.
-- **REQ-FMT-002** When a vault or export file has a format version, item schema, export schema, KDF id or KDF version other than the one supported (smaller or larger), the core shall return `UnsupportedVersion` or `Corrupt` as specified in CS §9, and shall not attempt to read, convert or re-save it.
+- **REQ-FMT-002** When a vault or export file has a format version, KDF id or KDF version, or a JSON `schema`/`export_schema`, other than the one supported (smaller or larger), the core shall return `UnsupportedVersion`; the other checks of the ordered tables in CS §9 return the errors listed there (the first failing check decides), and the core shall not attempt to read, convert or re-save an unsupported file. A changed record `item_schema` is `Authentication` (it is only authenticated, never pre-checked).
 - **REQ-FMT-003** When a vault file is truncated, has trailing bytes, has non-zero flags, has out-of-bound lengths or counts, or has unsorted or duplicate record IDs, the core shall return `Corrupt` without panicking and without allocating more than the file's own length.
 - **REQ-FMT-004** When the core saves a vault, it shall write a temporary file in the same directory, flush and fsync it, rename it over the target, and fsync the directory where the platform supports it, so that a failure at any point leaves either the complete old file or the complete new file.
 - **REQ-FMT-005** When a vault file is created on a Unix platform, the core shall create it with permissions 0600.
 - **REQ-FMT-006** When a save fails, the core shall remove its temporary file, leave the target file unchanged, and return `Io`.
+- **REQ-FMT-008** When a new vault file is created, the core shall write a temporary file (0600, fsync), publish it with `std::fs::hard_link` (which fails if the target exists), remove the temporary file and fsync the directory (CS §6.6); it shall never use `rename` for creation, so an existing file is never replaced and a crash leaves either no vault or a complete one; where hard links are unavailable it returns `Io`.
+- **REQ-FMT-009** When a save targets a symbolic link, the core shall write and rename next to and over the resolved file, so the link remains.
 - **REQ-FMT-007** The core shall check magic and version before interpreting any other header field (CS §9 order).
 
 ## ITM — item model
@@ -45,24 +47,27 @@ requirement is testable; `features.json` maps each one to a feature that tests i
 - **REQ-ITM-001** The core shall represent a login item with title, username, password, a list of URLs, notes, an optional TOTP secret with algorithm, digits and period, and custom fields (name, value, hidden flag).
 - **REQ-ITM-002** The core shall represent a secure note item with title and notes, and shall reject a note carrying username, password, URLs or TOTP.
 - **REQ-ITM-003** The core shall store `created_ms` and `updated_ms` timestamps; when an item is added both are set to the current time, and when it is updated `created_ms` is kept and `updated_ms` is set to the current time (never earlier than `created_ms`).
-- **REQ-ITM-004** The core shall serialize items as the versioned JSON of CS §7 and, when deserializing, shall reject unknown fields, duplicate keys, missing fields, wrong types, values over the limits of CS §7, and `schema` values other than 1.
+- **REQ-ITM-004** The core shall serialize items as the compact, fixed-key-order versioned JSON of CS §7 and, when deserializing, shall read `schema` first (`UnsupportedVersion` unless 1) and then reject unknown fields, duplicate keys (also inside `totp` and `fields[]`), missing fields, **including absent nullable keys** (`username`, `password`, `totp` must be present, possibly `null`), wrong types and values over the limits of CS §7.
 - **REQ-ITM-005** When an item is added, the core shall assign it a random 128-bit ID (shown as 32 lowercase hex characters) that is unique in the vault.
+- **REQ-ITM-007** The core shall store a TOTP secret only in the canonical form of CS §7 (upper-case base32, no padding or separators, 10..=128 decoded bytes); `Item::validate` shall reject any other form with `InvalidInput`, and `normalize_totp_secret` shall produce the canonical form from user input.
 - **REQ-ITM-006** When an item violates a limit in CS §7 (sizes, counts, kind rules, TOTP parameters), the core shall return `InvalidInput` and leave the vault unchanged.
 
 ## LIF — lifecycle
 
-- **REQ-LIF-001** When `create` is called, the core shall write a new, empty, valid vault file and return an unlocked vault and the new secret key; if the target path already exists, it shall return an error and leave the existing file untouched.
+- **REQ-LIF-001** When `create` is called, the core shall write a new, empty, valid vault file using the create procedure of CS §6.6 (REQ-FMT-008) and return an unlocked vault and the new secret key; `create_with_key` shall do the same with a caller-supplied secret key. If the target path already exists, even if it appears between the temporary write and the publication, the core shall return an error and leave the existing file untouched.
 - **REQ-LIF-002** When `unlock` is called with the correct password and secret key, the core shall return an unlocked vault from which all items can be read.
 - **REQ-LIF-003** When a vault is locked or dropped, the core shall zeroize the vault key, subkeys and any decrypted item contents it holds; a locked vault is not representable as a usable value.
 - **REQ-LIF-004** When `add` is called with a valid item, the core shall persist it atomically and return its new ID, with revision 1.
 - **REQ-LIF-005** When `get` is called with an existing ID, the core shall return the decrypted item with its ID and revision; for an unknown ID it shall return `NotFound`.
-- **REQ-LIF-006** When `update` is called for an existing ID, the core shall replace the item with a new revision (revision + 1, fresh item key and nonces), persist atomically, and keep the ID and `created_ms`; for an unknown ID it shall return `NotFound`.
+- **REQ-LIF-006** When `update` is called for an existing ID, the core shall replace the item with a new revision (revision + 1, fresh item key and nonces), persist atomically, and keep the ID and `created_ms`; for an unknown ID it shall return `NotFound`, and for a stored revision of `u64::MAX` it shall return `LimitExceeded`.
 - **REQ-LIF-007** When `delete` is called for an existing ID, the core shall remove the record, persist atomically, and afterwards `get` for that ID shall return `NotFound`.
-- **REQ-LIF-008** When `list` is called, the core shall return summaries (ID, kind, title, username, `updated_ms`, revision) sorted by title (case-insensitive, then ID), and the summaries shall not contain passwords, notes, TOTP secrets or hidden field values.
-- **REQ-LIF-009** When `search` is called with a query, the core shall return the summaries whose title, username or any URL contains the query as a case-insensitive substring, and shall not search passwords, notes, TOTP secrets or custom fields.
+- **REQ-LIF-008** When `list` is called, the core shall return summaries (ID, kind, title, username, `updated_ms`, revision) sorted by `title.to_lowercase()` compared byte-wise, then by ID, and the summaries shall not contain passwords, notes, TOTP secrets or hidden field values.
+- **REQ-LIF-009** When `search` is called with a query, the core shall return the summaries whose title, username or any URL contains the query as a substring after both are lower-cased with `str::to_lowercase()`, and shall not search passwords, notes, TOTP secrets or custom fields.
 - **REQ-LIF-010** When `change_master_password` is called, the core shall verify the current password, re-wrap the same vault key under a master key derived from a new random salt and the new password (same secret key), leave all item records byte-identical, persist atomically, and afterwards the old password shall fail with `Authentication`.
 - **REQ-LIF-011** When `rotate_vault_key` is called, the core shall generate a new vault key, re-encrypt every item under a fresh item key and fresh nonces with unchanged revisions and contents, re-wrap and persist atomically, and afterwards no old item key or old ciphertext shall validate against the new file.
 - **REQ-LIF-012** When any mutating operation fails (including on I/O error), the on-disk file and the in-memory vault shall be unchanged.
+- **REQ-LIF-014** When `add`, `update` or `import` would produce a vault image above 512 MiB or more than 100 000 records, the core shall return `LimitExceeded` before writing anything; `export` shall return `LimitExceeded` rather than write a payload above `MAX_EXPORT_PLAINTEXT` (CS §10).
+- **REQ-LIF-015** The core shall provide `change_master_password_and_rotate_key`, which changes the password and rotates the vault key in one atomic write; `change_master_password` alone does not revoke earlier knowledge of the vault key (CS §6.5) and its documentation shall say so.
 - **REQ-LIF-013** When the core is asked to change the master password to the current password, it shall still generate a new salt and nonce.
 
 ## GEN — password generator
@@ -83,16 +88,17 @@ requirement is testable; `features.json` maps each one to a feature that tests i
 
 ## EXP — export and import
 
-- **REQ-EXP-001** When an export is requested with an export password, the core shall write an export file in the format of CS §8 containing every item of the unlocked vault, atomically (REQ-FMT-004).
-- **REQ-EXP-002** When an export file is imported into an unlocked vault with the correct export password, the core shall add every item under its original ID, revision and content, and an export of vault A imported into a fresh vault B shall make B's `list` and every `get` equal A's.
-- **REQ-EXP-003** When the export password is wrong or any byte of the export file is changed, import shall fail with `Authentication`, `Corrupt` or `UnsupportedVersion` and shall change nothing.
+- **REQ-EXP-001** When an export is requested with an export password, the core shall write an export file in the format of CS §8 containing every item of the unlocked vault, atomically (REQ-FMT-004). The export key shall combine the export password and the vault's secret key (`export` takes the key as an argument), so that the export is useless without both; `export` shall return `InvalidInput` when the target is the vault file itself (canonicalized comparison).
+- **REQ-EXP-002** When an export file is imported into an unlocked vault with the correct export password and the secret key of the vault it was exported from (`source_key`, which need not be the target vault's key), the core shall add every item under its original ID, revision and content, and an export of vault A imported into a fresh vault B shall make B's `list` and every `get` equal A's.
+- **REQ-EXP-003** When the export password or the source secret key is wrong or any byte of the export file is changed, import shall fail with `Authentication`, `Corrupt` or `UnsupportedVersion` (never plaintext) and shall change nothing; wrong password and wrong key give the same `Authentication`.
 - **REQ-EXP-004** When an import contains an item ID that already exists in the target vault, the core shall return `Conflict` and import nothing (all or nothing).
 - **REQ-EXP-005** The export file shall not contain the secret key, the vault key, any item key or the master password in any form.
+- **REQ-EXP-007** When the export target is the vault file itself (compared after canonicalization, including through a symbolic link), `export` shall return `InvalidInput` and leave the vault untouched; the CLI shall exit 2.
 - **REQ-EXP-006** When an export file exceeds the limits in CS §10 or declares an inconsistent `ct_len`, the core shall return `Corrupt` without allocating more than the file's own length.
 
 ## SEC — secrets and robustness (negative requirements)
 
-- **REQ-SEC-001** The core shall zeroize on drop every type that holds key material, passwords, decrypted item fields or plaintext buffers.
+- **REQ-SEC-001** The core shall zeroize on drop every type that holds key material, passwords, decrypted item fields or plaintext buffers, including the serialized item plaintext before encryption (a `Zeroizing<Vec<u8>>` with preallocated capacity); copies left by `serde_json` and `String`/`Vec` growth are a documented residual risk (architecture.md §4).
 - **REQ-SEC-002** The core shall not implement `Debug`, `Display` or `Serialize` in a way that reveals key material or plaintext; the `Debug` output of every secret-holding type shall be a fixed redacted string.
 - **REQ-SEC-003** The core shall not place passwords, keys, plaintext or item content in any error value, error message, log line or panic message.
 - **REQ-SEC-004** When given malformed or hostile input (vault file, export file, item JSON, secret key text, TOTP secret, CLI arguments), the core and the CLI shall return an error and shall not panic, abort, loop forever or allocate memory proportional to an attacker-declared length.
@@ -105,10 +111,12 @@ requirement is testable; `features.json` maps each one to a feature that tests i
 ## CLI — command-line tool
 
 - **REQ-CLI-001** The CLI `onlypassword` shall provide the commands `init`, `add-login`, `add-note`, `get`, `list`, `search`, `update`, `delete`, `passwd`, `rotate-key`, `export`, `import`, `generate`, `totp` as specified in architecture.md.
-- **REQ-CLI-002** The CLI shall read every password, TOTP secret and item secret only from an interactive no-echo prompt or, with `--stdin`, from standard input lines in the documented order, and shall never accept them as command-line arguments or environment variables.
-- **REQ-CLI-003** When `init` runs, the CLI shall write the secret key text to the file given by `--secret-key-file` with permissions 0600 (created exclusively, never overwritten), print only the path and a reminder, and not print the key unless `--print-secret-key` is given.
+- **REQ-CLI-002** The CLI shall read every password, TOTP secret, item secret, hidden custom-field value and item notes only from an interactive no-echo prompt or, with `--stdin`, from standard input lines in the documented order (or, for notes, from `--notes-file`), and shall never accept them as command-line arguments or environment variables; `--field NAME=VALUE` is accepted only for non-hidden fields.
+- **REQ-CLI-003** When `init` runs, the CLI shall follow the order of architecture.md §5 (check paths, generate the key, write the key file exclusively with permissions 0600 and fsync, read it back, only then create the vault with `create_with_key`, and remove the key file again if vault creation fails), so that no vault exists without its key file; it shall never overwrite an existing key file or vault, print only the paths and a reminder, and not print the key unless `--print-secret-key` is given.
 - **REQ-CLI-004** When a command fails, the CLI shall exit non-zero with a one-line message that contains no secret, and exit 0 on success; exit codes are 1 (error), 2 (usage), 3 (authentication failure).
-- **REQ-CLI-005** When `get` prints an item, the CLI shall omit the password, TOTP secret and hidden field values unless `--show-secrets` is given.
+- **REQ-CLI-005** When `get` prints an item, the CLI shall omit the password, notes, TOTP secret and hidden field values (printing `<hidden>`) unless `--show-secrets` is given.
+- **REQ-CLI-007** The CLI shall let the user set every item attribute of the core's item model (title, username, URLs, notes, TOTP secret, algorithm, digits and period, non-hidden and hidden custom fields) on `add-login` and `update`, and clear them on `update`, with the flags and replace semantics of architecture.md §5.
+- **REQ-CLI-008** `passwd --rotate` shall change the password and rotate the vault key in one atomic write; `import` shall take the secret key of the exporting vault via `--source-secret-key-file`.
 - **REQ-CLI-006** The CLI shall not link any code beyond the core, the standard library, and the approved prompt crate, and shall keep no state outside the vault file and the key file.
 
 ## BLD — build discipline

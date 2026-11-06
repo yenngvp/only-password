@@ -13,11 +13,13 @@ vectors; hex strings are lower-case with no separators.
 | hotp.json | RFC 4226 App. D | HOTP, HMAC-SHA-1, 6 digits |
 | totp.json | RFC 6238 App. B | TOTP SHA-1/256/512, 8 digits, 30 s |
 | base32.json | RFC 4648 §10 | base32 encoding (with padding as published) |
+| chacha20poly1305.json | RFC 8439 §2.8.2 | ChaCha20-Poly1305 (96-bit nonce = `07000000` ‖ IV), the construction under XChaCha20-Poly1305 |
+| hchacha20.json | draft-irtf-cfrg-xchacha-03 §2.2.1 | HChaCha20 subkey derivation (key, 16-byte nonce → subkey; the draft prints the subkey as the byte string) |
+| hmac-sha1.json | RFC 2202 §3 (cases 1–4) | HMAC-SHA-1 (cases 5–7 omitted) |
 
 Not available as an official source reachable from the planning environment, so **not
 provided** (no values were invented): standalone SHA-1/SHA-256 vectors (covered indirectly
-by HKDF, HMAC and TOTP vectors), HMAC-SHA-1 vectors beyond the HOTP table (RFC 2202 is not
-needed because HOTP/TOTP cover SHA-1), and any vector for the onlypassword compositions
+by HKDF, HMAC and TOTP vectors), an Argon2id vector without the optional secret and associated data (none could be fetched from the permitted hosts), and any vector for the onlypassword compositions
 (CS §3, §6, §8), which are tested by round-trip, tamper and layout tests.
 
 Notes on individual files:

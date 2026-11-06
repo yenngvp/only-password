@@ -32,6 +32,8 @@ sha1), `--totp-digits N` (default 6), `--totp-period N` (default 30), repeatable
 `--clear-totp`, `--clear-fields`. State the defaults in CS §7 / architecture §5. Add the
 prompt order for the new prompts.
 
+Resolution: Fixed. architecture.md §5 now defines shared item flags (--totp-algorithm/--totp-digits/--totp-period, --field, --hidden-field, --clear-*), prompt order and `update` replace semantics; new REQ-CLI-007; F020 split out as `F020-cli-items` (later features renumbered F021–F023); F021 TOTP test uses `add-login --totp --totp-digits 8`.
+
 ### R-02 — major — `crypto-spec.md` §8, `OPEN-QUESTIONS.md` #8, `threat-model.md` residual risk 4
 The export key is derived from the export password alone (no secret key). The brief says
 "Stolen vault data must be useless without both" the master password and the secret key. An
@@ -46,6 +48,8 @@ current design but (a) enforce at least the default KDF parameters for export
 (`m ≥ 65 536, t ≥ 3`), (b) raise the export password floor (e.g. 12 scalar values), and
 (c) record the deviation from the brief in `OPEN-QUESTIONS.md` item 8 as an explicit
 owner decision, not a default.
+
+Resolution: Fixed with the preferred option. CS §8: `K_x = HKDF(salt, export_pw_key ‖ SK, INFO_EXPORT)`; `export(.., key, ..)`/`import(.., source_key)` take the secret key; CLI `import --source-secret-key-file`. Export KDF params share the raised floor. Updated requirements (REQ-EXP-001..003), threat model (A7, ATK-4, T-EXPLEAK, residual risk 4), OPEN-QUESTIONS #8 (the portable-password-only alternative is recorded as an owner decision, not applied), F018/F021/F023.
 
 ### R-03 — major — `crypto-spec.md` §9, §6.3, §8; `requirements.md` REQ-FMT-002, REQ-ENC-003; F009, F010, F018
 Error classes for version/identifier mismatches contradict each other.
@@ -71,6 +75,8 @@ decryption `schema != 1` is `UnsupportedVersion`); export order: length ≥ 90, 
 `export_schema`, payload validation. Parse the JSON `schema` field first (two-pass), and
 return `UnsupportedVersion` before any unknown-field check.
 
+Resolution: Fixed. CS §9 now has one ordered table for vault files and one for export files with the exact error per step. kdf_id/kdf_version → `UnsupportedVersion`; `item_schema` is never pre-checked (changed value → `Authentication`); JSON is read in two passes with `schema`/`export_schema` first → `UnsupportedVersion` before any unknown-field check; item schema inside an export likewise. architecture §3, REQ-FMT-002, F009, F010, F018, F022 aligned.
+
 ### R-04 — major — `features.json` F012, F011 (`create_exclusive`), REQ-LIF-001, REQ-FMT-004
 `Vault::create` is specified to write "with create_exclusive semantics". A direct
 exclusive write puts a partial vault at the final path if the process dies mid-write, which
@@ -82,6 +88,8 @@ appeared in the meantime, breaking REQ-LIF-001 ("existing file untouched").
 error, not to rename, where hard links are unavailable. Add an acceptance test with the
 target created between temp write and link (via an injectable hook) and one with a crash
 simulated before the link.
+
+Resolution: Fixed. CS §6.6 specifies create as temp file + `hard_link` + remove temp + fsync dir, no rename fallback; new REQ-FMT-008; F011 `create_new_atomic` with a pub(crate) hook and tests for the race and for a crash before the link; F012 acceptance extended.
 
 ### R-05 — major — `architecture.md` §5 `init`, F019, REQ-CLI-003, F012
 `Vault::create` writes the vault and only then returns the secret key; the CLI then writes
@@ -95,6 +103,8 @@ the vault with that key. That needs `Vault::create_with_key(path, password, para
 (or `create` taking `Option<SecretKey>`); add it to the API sketch. If vault creation fails,
 the CLI removes the key file it created. Add a test for each failure.
 
+Resolution: Fixed. `Vault::create_with_key` added (architecture §2); architecture §5 "init order" defines the seven steps with read-back and cleanup; REQ-CLI-003 rewritten; F019 acceptance has one test per failure mode.
+
 ### R-06 — major — `crypto-spec.md` §7, REQ-ITM-004, F008
 "Reject a missing required field" is not what serde derive does for `Option<T>` fields: a
 missing `username`, `password` or `totp` key silently becomes `None`. `username`/`password`
@@ -106,6 +116,8 @@ non-`Option` wrapper type, or a pre-pass over `Value` checking the key set equal
 for the kind), and add a test row per nullable field "key absent → error". Name the check
 for duplicates in nested objects (`fields[]`, `totp`).
 
+Resolution: Fixed. CS §7 requires present-but-nullable keys via `deserialize_with`/wrapper, forbids `serde(default)`/`flatten`, and names duplicate-key rejection in nested objects; REQ-ITM-004 and F008 add a row per absent nullable key and nested duplicates.
+
 ### R-07 — major — `architecture.md` §5, REQ-CLI-002, REQ-CLI-005, T-LOGLEAK
 `add-login`, `add-note` and `update` take `--notes N` on argv. `notes` is a `SecretString`
 in the core and the threat model (ATK-6) says "nothing secret crosses argv". Notes
@@ -114,6 +126,8 @@ password, TOTP secret and hidden fields) although the core treats notes as secre
 **Fix:** read notes from a prompt/stdin line (state the order), or from `--notes-file`;
 list notes among the hidden values for `get` unless `--show-secrets`. Update REQ-CLI-002,
 REQ-CLI-005 and the F019 test.
+
+Resolution: Fixed. `--notes` is now a prompt switch (plus `--notes-file`); notes are hidden by `get` unless `--show-secrets`; REQ-CLI-002, REQ-CLI-005, architecture §5, F019/F020 tests updated. `--field NAME=VALUE` is limited to non-hidden fields.
 
 ### R-08 — major — `crypto-spec.md` §7 vs `OPEN-QUESTIONS.md` #12, REQ-TOT-003, F008, F017
 CS §7 (the byte-level authority) gives the TOTP secret as "base32, no padding, upper case"
@@ -127,6 +141,8 @@ period.
 canonical (upper case, no padding, no separators) — `validate` rejects otherwise; the CLI
 and `parse_totp_secret` canonicalize before storing. Add negative tests to F008.
 
+Resolution: Fixed. CS §7 states the canonical form and 10..=128 decoded-byte rule; `Item::validate` rejects non-canonical secrets; `normalize_totp_secret`/`parse_totp_secret` live in the F004 base32 module (also resolves R-19); new REQ-ITM-007; negative tests added to F004 and F008.
+
 ### R-09 — minor — `crypto-spec.md` §10, F013, F018, REQ list
 Limits are only enforced on parse. No requirement or acceptance test enforces
 "items per vault ≤ 100 000" or "vault file ≤ 512 MiB" on `add`/`import`/`update`
@@ -137,6 +153,8 @@ export. **Fix:** require mutations to return `LimitExceeded` before writing when
 image would exceed 512 MiB, 100 000 items, or the export limit; derive the export limit
 from the vault limit (e.g. `MAX_EXPORT_PLAINTEXT = 2 × 512 MiB`, or lower the vault limit to
 fit). Add tests.
+
+Resolution: Fixed. REQ-LIF-014 and CS §10 "Enforcement on mutation": `LimitExceeded` before writing for 512 MiB / 100 000 items; `MAX_EXPORT_PLAINTEXT` raised to 1 GiB (2 × vault limit) with a size argument that a valid vault always fits; tests in F013 (reduced limits under cfg(test)) and F018.
 
 ### R-10 — minor — `crypto-spec.md` §10, `architecture.md` §2 `KdfParams::MIN`
 The "floor" (8 MiB, t = 1, p = 1) is far below RFC 9106's second recommended option and the
@@ -151,6 +169,8 @@ constructors plus a `pub(crate)` test seam, and for integration tests a feature 
 `insecure-fast-kdf` that is not in `default`). Optionally add `Vault::kdf_params()` so a UI
 can warn on weak parameters.
 
+Resolution: Fixed. Public floor raised to m ≥ 19 456 KiB, t ≥ 2, p ≥ 1 (also enforced when opening files, so REQ-KEY-004 changed from the old 8 MiB/t=1 floor). Test seam: `KdfParams::FAST_FOR_TESTS` and a lowered `validate` floor only under `cfg(test)` or non-default feature `insecure-fast-kdf`; `validate_strict` always real and unit-tested, so `--all-features` in the gate still tests the real floor. `Vault::kdf_params()` added. Self-referential dev-dependency avoided; integration tests use `#![cfg(feature = ...)]`.
+
 ### R-11 — minor — `crypto-spec.md` §6.5, `threat-model.md` T-PWCHANGE
 `change_master_password` keeps the vault key and every item key. Anyone who held the old
 password, the secret key and *any past copy of the header* can recover `VK` and decrypt all
@@ -159,12 +179,16 @@ access. **Fix:** document that password change does not revoke access derived fr
 previously compromised password+secret key and that `rotate_vault_key` is required in that
 case; make CLI `passwd --rotate` (or a prompt) do both in one atomic write.
 
+Resolution: Fixed. CS §6.5 documents that password change does not revoke earlier knowledge of VK; new `change_master_password_and_rotate_key` (REQ-LIF-015, F014) and CLI `passwd --rotate` (REQ-CLI-008); threat model T-PWCHANGE and OPEN-QUESTIONS #17 updated.
+
 ### R-12 — minor — `architecture.md` §2 `export`/`import`, REQ-EXP-001
 `export --out` and `import --in` may point at the vault file itself (or a symlink to it).
 Exporting over the vault replaces the vault with an export file. Rename over a symlink
 replaces the link, not the target. **Fix:** reject (`InvalidInput`) when the export target
 equals the vault path (compare canonicalized paths); state symlink behaviour of
 `write_atomic` (resolve the final path first, then temp in its directory).
+
+Resolution: Fixed. CS §6.6 and REQ-EXP-007: export rejects a target equal to the vault (canonicalized, symlink-aware); `write_atomic` resolves symlinks first (REQ-FMT-009); `storage::same_file_path`; tests in F011, F018, F021.
 
 ### R-13 — minor — `spec/vectors/`, `crypto-spec.md` §11, F007
 The only Argon2id KAT uses the optional secret and associated data, which the production
@@ -180,6 +204,8 @@ HMAC-SHA-1, and generate one end-to-end composition vector (fixed password, SK, 
 nonces → expected file bytes) with an independent implementation (e.g. a short script using
 libsodium/Python), recorded with its provenance, so layout and AD bytes are pinned.
 
+Resolution: Partly fixed. Added from the permitted hosts: RFC 8439 §2.8.2 (`chacha20poly1305.json`), RFC 2202 cases 1–4 (`hmac-sha1.json`), draft-xchacha-03 §2.2.1 HChaCha20 (`hchacha20.json`; noted as not testable through the approved crates, informational). Extracted mechanically and checked against the fetched text. Rejected: an Argon2id vector without K/X and an end-to-end composition vector — no authoritative source is reachable and the planning environment has no independent implementation; nothing was invented. Recorded as OPEN-QUESTIONS #16, and F018/F007 re-derive keys and AD independently. The reviewer's note that the HChaCha20 vector is in A.3.1 is slightly off: it is in §2.2.1 of the draft.
+
 ### R-14 — minor — `crypto-spec.md` §3.1
 NFKC output depends on the Unicode version of the `unicode-normalization` tables; a
 dependency update that changes tables for newly assigned code points could change
@@ -188,16 +214,22 @@ file. **Fix:** note it as accepted, or pin the crate version in `Cargo.lock` pol
 test with a few fixed normalizations (e.g. the two in F006 plus U+FB01 "ﬁ" → "fi",
 U+00B5 → U+03BC) whose expected bytes are in the spec.
 
+Resolution: Accepted and documented: CS §3.1 states the dependence on the `unicode-normalization` version in `Cargo.lock` and pins four fixed normalization results (spec'd expected bytes), tested in F006; OPEN-QUESTIONS #18.
+
 ### R-15 — minor — `requirements.md` REQ-LIF-008/009, `architecture.md` §2, F013
 "Case-insensitive" and "lower-cased title" are undefined: `str::to_lowercase` (full Unicode
 lowercase), simple case folding, or ASCII-only give different orderings and matches
 (`İ`, `ß`, `Σ`). **Fix:** specify `str::to_lowercase()` on both sides and byte-wise
 comparison of the results, then ID; add a non-ASCII test.
 
+Resolution: Fixed. REQ-LIF-008/009 and architecture §2 define `str::to_lowercase()` with byte-wise comparison, then ID; F013 has a non-ASCII ordering/search test.
+
 ### R-16 — minor — `crypto-spec.md` §5.1, REQ-LIF-006
 `revision` is `u64` starting at 1 and imports preserve arbitrary revisions (up to
 `u64::MAX`, §8). `update` on revision `u64::MAX` overflows (panic in debug, wrap in
 release). **Fix:** `update` returns `LimitExceeded` at `u64::MAX`; add a test via import.
+
+Resolution: Fixed. CS §5.1, REQ-LIF-006 and architecture §2: `update` at revision `u64::MAX` returns `LimitExceeded`; tested via import in F018.
 
 ### R-17 — minor — `approved-deps.txt`, `OPEN-QUESTIONS.md` #1
 - `bip39` (2.x) brings `bitcoin_hashes` (a second SHA-256 implementation) and, with default
@@ -216,12 +248,16 @@ release). **Fix:** `update` returns `LimitExceeded` at `u64::MAX`; add a test vi
   crate found. cargo-deny licence list covers the crates' licences (bitcoin_hashes CC0,
   unicode crates `Unicode-3.0`/MIT/Apache).
 
+Resolution: Mostly fixed. `hex` removed from approved-deps (a small hex codec lives in the F004 base32 module); `bip39` notes: fewest features, never `rand`, feature set recorded in agent-notes (the exact feature list cannot be verified offline, so it is left to the builder under those constraints); `argon2` notes: `alloc`, `zeroize` if offered, not `parallel` (sequential lanes); `chacha20poly1305` defaults. Vendoring the word list was not adopted, to stay within the owner's earlier OPEN-QUESTIONS #1 decision.
+
 ### R-18 — minor — `architecture.md` §1 (workspace lints), `gate.sh`
 Gate runs `clippy --all-targets -D warnings`. Enabling `clippy::unwrap_used`,
 `indexing_slicing`, `panic` in `[workspace.lints]` applies to tests too ("for non-test code"
 cannot be expressed there) and would fail every test that unwraps. **Fix:** say to use
 `#![cfg_attr(not(test), deny(...))]` in each crate root, or `clippy.toml` with
 `allow-unwrap-in-tests = true` etc.
+
+Resolution: Fixed. Architecture §1 and F001: `#![cfg_attr(not(test), deny(clippy::unwrap_used, ...))]` in each crate root instead of `[workspace.lints]`; F001 acceptance checks tests may use unwrap.
 
 ### R-19 — minor — `features.json` dependencies
 - F008 depends on F007 (keys); the item model needs only F002/F004. Harmless but orders
@@ -235,6 +271,8 @@ cannot be expressed there) and would fail every test that unwraps. **Fix:** say 
 - F001 check: with zero dependencies every gate step is satisfiable (`cargo metadata`,
   empty `used` list handled by `|| true`, cargo-deny on an empty graph, forbid grep on
   `lib.rs`/`main.rs`). OK.
+
+Resolution: Fixed. `parse_totp_secret`/`normalize_totp_secret` moved into F004 (F017 reuses them; F020 depends on F017/F004); F008 now depends on F003 and F004 instead of F007; `generate_*_with(&mut dyn RandomSource, ..)` declared `pub(crate)` for unit tests (architecture §2, F015/F016). F013 not split pre-emptively; the reviewer's fallback is noted for the driver if it fails. Because the CLI feature grew, F019 was split into F019/F020.
 
 ### R-20 — minor — ambiguities that change bytes or behaviour (not security-relevant)
 - JSON serialization: key order, whitespace and escaping of the item plaintext and export
@@ -256,12 +294,16 @@ cannot be expressed there) and would fail every test that unwraps. **Fix:** say 
   non-default feature so a caller cannot back-date timestamps. The brief says "do not build
   hooks" for out-of-scope features; this one is for tests only, hence minor.
 
+Resolution: Fixed item by item: JSON writing is compact fixed key order (CS §7); `uniform` uses `from_be_bytes`; import ignores payload `vault_id`, no password minimum on import, `exported_ms` = vault clock, item-count limit (CS §8, §9); key-file rule is trim ASCII whitespace then `from_text` (CS §3.2, architecture §5); `update --url` replaces, clear flags listed, `--generate` is not printed without `--show-secrets`; capitalize is ASCII upper-case of the first byte; `set_clock` is `#[doc(hidden)]` and only under `cfg(test)` or feature `test-hooks`.
+
 ### R-21 — minor — `architecture.md` §4 secrets
 `Zeroizing<String>` zeroizes the final allocation only; `String` growth (push, reserve) and
 `serde_json` output buffers leave copies. The spec already admits serde_json; extend the
 admission to `String` growth and `Vec` reallocation, and require `with_capacity` for known
 sizes and `Zeroizing<Vec<u8>>` for the serialized plaintext before encryption (the
 serialization side of §4.5 only mentions parsing).
+
+Resolution: Fixed. Architecture §4.5 admits `String`/`Vec` growth copies and requires `with_capacity` and a `Zeroizing<Vec<u8>>` for the serialized plaintext; REQ-SEC-001, CS §7 and the threat model residual risk 1 updated.
 
 ---
 
