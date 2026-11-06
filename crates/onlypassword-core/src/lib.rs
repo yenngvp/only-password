@@ -14,12 +14,16 @@
 pub mod base32;
 pub mod crypto;
 pub mod error;
+pub mod item;
 pub mod rng;
 pub mod secret;
 #[cfg(test)]
 mod testutil;
 
 pub use error::{Error, Result};
+pub use item::{
+    CustomField, Item, ItemId, ItemKind, TotpAlgorithm, TotpConfig, MAX_ITEM_PLAINTEXT,
+};
 pub use secret::{SecretBytes, SecretString, SecretVec};
 
 #[cfg(test)]
