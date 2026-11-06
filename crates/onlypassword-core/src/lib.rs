@@ -11,6 +11,7 @@
 
 //! Core library of onlypassword.
 
+pub mod base32;
 pub mod error;
 pub mod rng;
 pub mod secret;
