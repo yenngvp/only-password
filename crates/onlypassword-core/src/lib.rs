@@ -12,6 +12,7 @@
 //! Core library of onlypassword.
 
 pub mod error;
+pub mod rng;
 pub mod secret;
 
 pub use error::{Error, Result};
