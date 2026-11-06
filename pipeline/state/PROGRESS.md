@@ -25,3 +25,7 @@ Merged 2026-11-06 after 1 attempt(s), $0.37. Evaluator: Adds crypto::aead (XChaC
 ## F006-kdf: Argon2id key derivation and parameters
 
 Merged 2026-11-06 after 1 attempt(s), $0.33. Evaluator: Adds crypto::kdf with KdfParams (DEFAULT/MIN/cfg-gated FAST_FOR_TESTS, validate, validate_strict), NFKC password normalization returning a zeroizing SecretVec, a separate creation-path length check counted after NFKC, and argon2id() using Argon2id v0x13 with no secret/AD, 32-byte output wrapped in SecretBytes. Params are validated before Argon2 allocates. argon2 (alloc, zeroize; no parallel) and unicode-normalization are on the approved list. I ran the kdf tests with --all-features (13 pass) and a plain build; code matches CS 3.1, 3.3 and 10. No blocker or major findings.
+
+## F007-keys: Secret key and key hierarchy
+
+Merged 2026-11-06 after 1 attempt(s), $0.36. Evaluator: Adds crypto::keys with SecretKey (generate/to_text/from_text/from_key_file_text), MasterKey::derive (Argon2id then HKDF extract+expand, salt=kdf_salt, IKM=pw_key||SK, INFO_MK), VaultKey/ItemKey, and K_iw/K_fa via HKDF-Expand. It matches CS 3.2-3.5. Key types derive Zeroize/ZeroizeOnDrop, have redacted Debug, and are not Clone/Copy. Parsing is panic-free (uses str::get, no indexing) and every failure is InvalidInput. I ran the 11 keys/hkdf tests and all pass. The independent-recompute tests use the argon2 and hkdf crates directly with literal label strings.

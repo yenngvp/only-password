@@ -93,7 +93,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F007-keys": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.3575,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-231837-generator-agent_F007-keys",
+          "gate_log": ".pipeline/runs/20261106-232056-gate-agent_F007-keys/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-232149-evaluator-agent_F007-keys",
+          "evaluator_summary": "Adds crypto::keys with SecretKey (generate/to_text/from_text/from_key_file_text), MasterKey::derive (Argon2id then HKDF extract+expand, salt=kdf_salt, IKM=pw_key||SK, INFO_MK), VaultKey/ItemKey, and K_iw/K_fa via HKDF-Expand. It matches CS 3.2-3.5. Key types derive Zeroize/ZeroizeOnDrop, have redacted Debug, and are not Clone/Copy. Parsing is panic-free (uses str::get, no indexing) and every failure is InvalidInput. I ran the 11 keys/hkdf tests and all pass. The independent-recompute tests use the argon2 and hkdf crates directly with literal label strings.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 5.8236
+  "total_cost_usd": 6.1811
 }
