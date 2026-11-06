@@ -1,10 +1,11 @@
 //! Vault lifecycle: create, unlock, lock (CS §6.6, §9).
 
 use crate::crypto::kdf::{self, KdfParams};
-use crate::crypto::keys::{FileAuthKey, ItemWrapKey, MasterKey, SecretKey, VaultKey};
-use crate::format::{VaultFile, MAX_VAULT_FILE};
+use crate::crypto::keys::{ItemWrapKey, MasterKey, SecretKey, VaultKey};
+use crate::format::{Record, VaultFile, MAX_RECORDS, MAX_VAULT_FILE};
+use crate::item::{Item, ItemId, ItemKind};
 use crate::secret::SecretString;
-use crate::{rng, seal, storage, Result};
+use crate::{rng, seal, storage, Error, Result};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -27,13 +28,11 @@ impl Clock for SystemClock {
 
 /// The unlocked vault. There is no locked `Vault` value. Key fields zeroize on drop
 /// (each key type is `ZeroizeOnDrop`); `Debug` is redacted.
-#[allow(dead_code)] // item operations (later features) use these fields
 pub struct Vault {
     path: PathBuf,
     file: VaultFile,
     vk: VaultKey,
     k_iw: ItemWrapKey,
-    k_fa: FileAuthKey,
     clock: Box<dyn Clock>,
 }
 
@@ -93,7 +92,6 @@ impl Vault {
         Ok(Vault {
             path: path.to_path_buf(),
             k_iw: vk.item_wrap_key()?,
-            k_fa: vk.file_auth_key()?,
             file,
             vk,
             clock: Box::new(SystemClock),
@@ -132,5 +130,187 @@ impl Vault {
     }
 }
 
+/// A decrypted item together with its stored metadata.
+#[derive(Debug)]
+pub struct StoredItem {
+    pub id: ItemId,
+    pub item: Item,
+    pub revision: u64,
+    pub created_ms: u64,
+    pub updated_ms: u64,
+}
+
+/// What `list` and `search` expose: no password, notes, TOTP secret or field values.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemSummary {
+    pub id: ItemId,
+    pub kind: ItemKind,
+    pub title: String,
+    pub username: Option<String>,
+    pub urls: Vec<String>,
+    pub revision: u64,
+    pub updated_ms: u64,
+}
+
+#[cfg(not(test))]
+fn max_records() -> usize {
+    MAX_RECORDS as usize
+}
+#[cfg(not(test))]
+fn max_image() -> usize {
+    MAX_VAULT_FILE
+}
+#[cfg(test)]
+thread_local! {
+    static LIMITS: std::cell::Cell<(usize, usize)> =
+        const { std::cell::Cell::new((MAX_RECORDS as usize, MAX_VAULT_FILE)) };
+}
+#[cfg(test)]
+fn max_records() -> usize {
+    LIMITS.with(|l| l.get().0)
+}
+#[cfg(test)]
+fn max_image() -> usize {
+    LIMITS.with(|l| l.get().1)
+}
+
+impl Vault {
+    fn index_of(&self, id: &ItemId) -> std::result::Result<usize, usize> {
+        self.file.records.binary_search_by(|r| r.item_id.cmp(&id.0))
+    }
+
+    fn open_at(&self, rec: &Record) -> Result<StoredItem> {
+        let (item, created_ms, updated_ms) =
+            seal::open_record(&self.k_iw, &self.file.header.vault_id, rec)?;
+        Ok(StoredItem {
+            id: ItemId(rec.item_id),
+            item,
+            revision: rec.revision,
+            created_ms,
+            updated_ms,
+        })
+    }
+
+    /// Build the complete new image, check limits, write atomically, then update memory.
+    fn commit(&mut self, records: Vec<Record>) -> Result<()> {
+        if records.len() > max_records() {
+            return Err(Error::LimitExceeded);
+        }
+        let img = seal::build_image(&self.file.header, records, &self.vk)?;
+        if img.len() > max_image() {
+            return Err(Error::LimitExceeded);
+        }
+        let parsed = VaultFile::parse(&img)?;
+        storage::write_atomic(&self.path, &img)?;
+        self.file = parsed;
+        Ok(())
+    }
+
+    /// Add an item; returns its new random id (revision 1, created = updated = now).
+    pub fn add(&mut self, item: &Item) -> Result<ItemId> {
+        item.validate()?;
+        let mut id = ItemId::generate()?;
+        while self.index_of(&id).is_ok() {
+            id = ItemId::generate()?;
+        }
+        let pos = self.index_of(&id).unwrap_or_else(|p| p);
+        let now = self.clock.now_ms();
+        let rec = seal::seal_item(
+            &self.k_iw,
+            &self.file.header.vault_id,
+            &id,
+            1,
+            item,
+            now,
+            now,
+        )?;
+        let mut records = self.file.records.clone();
+        records.insert(pos, rec);
+        self.commit(records)?;
+        Ok(id)
+    }
+
+    pub fn get(&self, id: &ItemId) -> Result<StoredItem> {
+        let i = self.index_of(id).map_err(|_| Error::NotFound)?;
+        let rec = self.file.records.get(i).ok_or(Error::NotFound)?;
+        self.open_at(rec)
+    }
+
+    /// Replace the item's content: revision + 1, new item key and nonces.
+    pub fn update(&mut self, id: &ItemId, item: &Item) -> Result<()> {
+        let i = self.index_of(id).map_err(|_| Error::NotFound)?;
+        item.validate()?;
+        let old = self.file.records.get(i).ok_or(Error::NotFound)?;
+        let revision = old.revision.checked_add(1).ok_or(Error::LimitExceeded)?;
+        let created_ms = self.open_at(old)?.created_ms;
+        let updated_ms = self.clock.now_ms().max(created_ms);
+        let rec = seal::seal_item(
+            &self.k_iw,
+            &self.file.header.vault_id,
+            id,
+            revision,
+            item,
+            created_ms,
+            updated_ms,
+        )?;
+        let mut records = self.file.records.clone();
+        *records.get_mut(i).ok_or(Error::NotFound)? = rec;
+        self.commit(records)
+    }
+
+    pub fn delete(&mut self, id: &ItemId) -> Result<()> {
+        let i = self.index_of(id).map_err(|_| Error::NotFound)?;
+        let mut records = self.file.records.clone();
+        records.remove(i);
+        self.commit(records)
+    }
+
+    fn summaries(&self, query: Option<&str>) -> Result<Vec<ItemSummary>> {
+        let q = query.map(str::to_lowercase);
+        let mut out = Vec::new();
+        for rec in &self.file.records {
+            let s = self.open_at(rec)?;
+            let it = &s.item;
+            if let Some(q) = &q {
+                let hit = it.title.to_lowercase().contains(q.as_str())
+                    || it
+                        .username
+                        .as_ref()
+                        .is_some_and(|u| u.to_lowercase().contains(q.as_str()))
+                    || it
+                        .urls
+                        .iter()
+                        .any(|u| u.to_lowercase().contains(q.as_str()));
+                if !hit {
+                    continue;
+                }
+            }
+            out.push(ItemSummary {
+                id: s.id.clone(),
+                kind: it.kind,
+                title: it.title.clone(),
+                username: it.username.clone(),
+                urls: it.urls.clone(),
+                revision: s.revision,
+                updated_ms: s.updated_ms,
+            });
+        }
+        out.sort_by_key(|a| (a.title.to_lowercase(), a.id.0));
+        Ok(out)
+    }
+
+    /// All items, sorted by `title.to_lowercase()` (byte-wise) then id bytes.
+    pub fn list(&self) -> Result<Vec<ItemSummary>> {
+        self.summaries(None)
+    }
+
+    /// Case-insensitive substring match on title, username and URLs only.
+    pub fn search(&self, query: &str) -> Result<Vec<ItemSummary>> {
+        self.summaries(Some(query))
+    }
+}
+
+#[cfg(test)]
+mod item_tests;
 #[cfg(test)]
 mod tests;

@@ -1,5 +1,6 @@
 use super::*;
 use crate::crypto::kdf::KdfParams;
+use crate::crypto::keys::FileAuthKey;
 use crate::format::{HEADER_LEN, MAGIC, TRAILER_LEN};
 use crate::Error;
 use std::cell::Cell;
