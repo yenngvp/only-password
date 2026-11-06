@@ -326,7 +326,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F022-robustness": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.653,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-005314-generator-agent_F022-robustness",
+          "gate_log": ".pipeline/runs/20261107-010128-gate-agent_F022-robustness/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-010345-evaluator-agent_F022-robustness",
+          "evaluator_summary": "Test-only change: a public-API integration suite (tests/robustness.rs) with a test-local xorshift RNG and a unit test module (vault/robustness_tests.rs) that seals bodies with the internal seal API. No production code changed. I ran both: 14 integration tests and 5 unit tests pass in release/debug with no ignored tests; grep finds no #[ignore] or catch_unwind. Fixtures have control tests, Ok results are compared against original plaintext, failed imports must leave the vault byte-identical, and each unlock/import is timed under 5 s. The only addition outside tests is a self dev-dependency (path, insecure-fast-kdf feature), which is not an external crate.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 13.5105
+  "total_cost_usd": 14.1635
 }
