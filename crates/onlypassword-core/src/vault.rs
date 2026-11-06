@@ -166,6 +166,10 @@ thread_local! {
         const { std::cell::Cell::new((MAX_RECORDS as usize, MAX_VAULT_FILE)) };
 }
 #[cfg(test)]
+thread_local! {
+    static FAIL_WRITE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+#[cfg(test)]
 fn max_records() -> usize {
     LIMITS.with(|l| l.get().0)
 }
@@ -191,6 +195,15 @@ impl Vault {
         })
     }
 
+    /// Atomic write of a prepared image; tests can inject a failure here.
+    fn persist(&self, img: &[u8]) -> Result<()> {
+        #[cfg(test)]
+        if FAIL_WRITE.with(|f| f.get()) {
+            return Err(Error::Io(std::io::ErrorKind::Other));
+        }
+        storage::write_atomic(&self.path, img)
+    }
+
     /// Build the complete new image, check limits, write atomically, then update memory.
     fn commit(&mut self, records: Vec<Record>) -> Result<()> {
         if records.len() > max_records() {
@@ -201,7 +214,7 @@ impl Vault {
             return Err(Error::LimitExceeded);
         }
         let parsed = VaultFile::parse(&img)?;
-        storage::write_atomic(&self.path, &img)?;
+        self.persist(&img)?;
         self.file = parsed;
         Ok(())
     }
@@ -310,7 +323,130 @@ impl Vault {
     }
 }
 
+impl Vault {
+    /// Changes the master password: verifies the current password and secret key, then
+    /// re-wraps the **same** vault key under a master key derived from a new random salt,
+    /// `new_params` and `new_password`. Records stay byte-identical; the write is atomic and
+    /// any failure leaves the old file and in-memory state untouched.
+    ///
+    /// This does **not** revoke earlier knowledge of the vault key: anyone who knew the old
+    /// password, has the secret key and holds a past copy of the header can still recover the
+    /// unchanged vault key and read later records. After a suspected password compromise use
+    /// [`Vault::change_master_password_and_rotate_key`], which also performs key rotation.
+    pub fn change_master_password(
+        &mut self,
+        current_password: &SecretString,
+        key: &SecretKey,
+        new_password: &SecretString,
+        new_params: KdfParams,
+    ) -> Result<()> {
+        self.rekey(
+            current_password,
+            key,
+            Some((new_password, new_params)),
+            false,
+        )
+    }
+
+    /// Generates a new vault key, re-seals every record (fresh item keys and nonces, same
+    /// revisions and contents) and re-wraps the key under the current master key.
+    pub fn rotate_vault_key(
+        &mut self,
+        current_password: &SecretString,
+        key: &SecretKey,
+    ) -> Result<()> {
+        self.rekey(current_password, key, None, true)
+    }
+
+    /// Changes the password and rotates the vault key in one atomic write; the new vault key
+    /// is wrapped under the **new** master key.
+    pub fn change_master_password_and_rotate_key(
+        &mut self,
+        current_password: &SecretString,
+        key: &SecretKey,
+        new_password: &SecretString,
+        new_params: KdfParams,
+    ) -> Result<()> {
+        self.rekey(
+            current_password,
+            key,
+            Some((new_password, new_params)),
+            true,
+        )
+    }
+
+    fn rekey(
+        &mut self,
+        current_password: &SecretString,
+        key: &SecretKey,
+        new: Option<(&SecretString, KdfParams)>,
+        rotate: bool,
+    ) -> Result<()> {
+        if let Some((np, params)) = &new {
+            kdf::check_new_password(np.expose())?;
+            params.validate()?;
+        }
+        // Verify the current password and key by deriving and unwrapping.
+        let h = &self.file.header;
+        let cur = kdf::normalize_password(current_password.expose());
+        let cur_mk = MasterKey::derive(cur.expose(), &h.kdf_salt, &h.kdf, key)?;
+        let unwrapped = seal::unwrap_vk(&cur_mk, h)?;
+        if unwrapped.expose() != self.vk.expose() {
+            return Err(Error::Authentication);
+        }
+        let (mk, params, salt) = match new {
+            Some((np, params)) => {
+                let salt = rng::random_array::<16>()?;
+                let n = kdf::normalize_password(np.expose());
+                (
+                    MasterKey::derive(n.expose(), &salt, &params, key)?,
+                    params,
+                    salt,
+                )
+            }
+            None => (cur_mk, h.kdf, h.kdf_salt),
+        };
+        let new_vk = if rotate {
+            VaultKey::generate()?
+        } else {
+            unwrapped
+        };
+        let header = seal::wrap_vk(&mk, &new_vk, h.vault_id, params, salt)?;
+        let new_kiw = new_vk.item_wrap_key()?;
+        let records = if rotate {
+            let mut out = Vec::with_capacity(self.file.records.len());
+            for rec in &self.file.records {
+                let (item, created, updated) = seal::open_record(&self.k_iw, &h.vault_id, rec)?;
+                out.push(seal::seal_item(
+                    &new_kiw,
+                    &h.vault_id,
+                    &ItemId(rec.item_id),
+                    rec.revision,
+                    &item,
+                    created,
+                    updated,
+                )?);
+            }
+            out
+        } else {
+            self.file.records.clone()
+        };
+        let img = seal::build_image(&header, records, &new_vk)?;
+        if img.len() > max_image() {
+            return Err(Error::LimitExceeded);
+        }
+        let parsed = VaultFile::parse(&img)?;
+        self.persist(&img)?;
+        self.file = parsed;
+        self.vk = new_vk;
+        self.k_iw = new_kiw;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod item_tests;
+#[cfg(test)]
+mod rekey_tests;
 #[cfg(test)]
 mod tests;
