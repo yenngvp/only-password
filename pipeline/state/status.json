@@ -131,7 +131,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F009-format-codec": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.3932,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-233158-generator-agent_F009-format-codec",
+          "gate_log": ".pipeline/runs/20261106-233424-gate-agent_F009-format-codec/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-233513-evaluator-agent_F009-format-codec",
+          "evaluator_summary": "Adds crates/onlypassword-core/src/format.rs: a key-free VaultFile parse/serialize codec using a bounds-checked Reader (checked_add, slice get, try_into; no indexing or unwrap in non-test code). Parse follows CS 9 steps 1-7 in order (length incl. LimitExceeded over 512 MiB, magic, version, flags, kdf id/version, KdfParams::validate mapped to Corrupt, structure). The record_count is bounded by remaining/146 before Vec::with_capacity, so no allocation is fed an untrusted count; body_ct is copied only after record_len and body_ct_len are verified against remaining bytes. Strict ascending ids, trailing bytes and trailer position are checked. I ran `cargo test --all-features format`: 12/12 pass. The tests use a hand-built image from the spec offsets (independent of serialize), and cover versions, flags, magic, KDF bounds, multi-fault ordering, record_count/record_len extremes, truncation at every length, and oversize input. No new deps; only a pub mod line added to lib.rs. Minor gaps only.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 7.005
+  "total_cost_usd": 7.3982
 }
