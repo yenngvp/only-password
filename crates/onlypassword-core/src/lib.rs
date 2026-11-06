@@ -22,12 +22,14 @@ pub mod secret;
 pub mod storage;
 #[cfg(test)]
 mod testutil;
+pub mod vault;
 
 pub use error::{Error, Result};
 pub use item::{
     CustomField, Item, ItemId, ItemKind, TotpAlgorithm, TotpConfig, MAX_ITEM_PLAINTEXT,
 };
 pub use secret::{SecretBytes, SecretString, SecretVec};
+pub use vault::{Clock, SystemClock, Vault};
 
 #[cfg(test)]
 mod tests {
