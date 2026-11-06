@@ -1,0 +1,20 @@
+{
+  "source": "https://www.rfc-editor.org/rfc/rfc9106.txt",
+  "document": "RFC 9106",
+  "section": "5.3 Argon2id Test Vectors",
+  "note": "This vector uses the optional secret (K) and associated data (X) inputs, and a tiny memory size, to exercise the primitive. It validates the Argon2id implementation only; production parameters are in crypto-spec.md.",
+  "vectors": [
+    {
+      "version": 19,
+      "memory_kib": 32,
+      "iterations": 3,
+      "parallelism": 4,
+      "tag_length": 32,
+      "password": "0101010101010101010101010101010101010101010101010101010101010101",
+      "salt": "02020202020202020202020202020202",
+      "secret": "0303030303030303",
+      "associated_data": "040404040404040404040404",
+      "tag": "0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659"
+    }
+  ]
+}
