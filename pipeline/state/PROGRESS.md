@@ -1,3 +1,7 @@
 # Progress
 
 Written by the pipeline driver. One entry per feature that reached main.
+
+## F001-workspace: Cargo workspace and gate baseline
+
+Merged 2026-11-06 after 1 attempt(s), $0.14. Evaluator: Adds a virtual workspace (resolver 2) with onlypassword-core (lib, non-default features insecure-fast-kdf and test-hooks) and onlypassword-cli (bin 'onlypassword'). It declares no dependencies, carries forbid(unsafe_code) and the cfg_attr clippy denies in both crate roots, and has one trivial test per crate and a committed Cargo.lock. I ran cargo build (produces target/debug/onlypassword), cargo clippy --all-targets -- -D warnings (clean, with unwrap in tests) and cargo test (2 pass). I did not re-run gate.sh; I relied on the stated pass. No crypto or secret code is involved.

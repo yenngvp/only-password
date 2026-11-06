@@ -3,6 +3,22 @@
     "cost_usd": 4.0933,
     "approved": true
   },
-  "features": {},
-  "total_cost_usd": 4.0933
+  "features": {
+    "F001-workspace": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.1408,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-230332-generator-agent_F001-workspace",
+          "gate_log": ".pipeline/runs/20261106-230409-gate-agent_F001-workspace/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-230413-evaluator-agent_F001-workspace",
+          "evaluator_summary": "Adds a virtual workspace (resolver 2) with onlypassword-core (lib, non-default features insecure-fast-kdf and test-hooks) and onlypassword-cli (bin 'onlypassword'). It declares no dependencies, carries forbid(unsafe_code) and the cfg_attr clippy denies in both crate roots, and has one trivial test per crate and a committed Cargo.lock. I ran cargo build (produces target/debug/onlypassword), cargo clippy --all-targets -- -D warnings (clean, with unwrap in tests) and cargo test (2 pass). I did not re-run gate.sh; I relied on the stated pass. No crypto or secret code is involved.",
+          "outcome": "passed"
+        }
+      ]
+    }
+  },
+  "total_cost_usd": 4.2341
 }
