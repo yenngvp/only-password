@@ -251,7 +251,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F017-totp": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.3334,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-001745-generator-agent_F017-totp",
+          "gate_log": ".pipeline/runs/20261107-002030-gate-agent_F017-totp/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-002154-evaluator-agent_F017-totp",
+          "evaluator_summary": "Adds crates/onlypassword-core/src/totp.rs with hotp, totp and totp_for_item. HMAC uses the hmac, sha1 and sha2 crates, all in approved-deps. Dynamic truncation follows RFC 4226, T = unix_secs / period, and no clock is read. Digits must be 6..=8, period 1..=300 and the secret 10..=128 bytes, otherwise InvalidInput. totp_for_item reuses parse_totp_secret from F004. HMAC tags are Zeroizing, and there is no unsafe code and no panicking indexing (slicing uses .get). I ran `cargo test -p onlypassword-core totp` and all 12 tests pass. All KATs load vectors from spec/vectors. There are no spec issues or dep requests to flag.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 10.2517
+  "total_cost_usd": 10.5851
 }
