@@ -18,7 +18,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F002-errors-secrets": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.2353,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261106-230430-generator-agent_F002-errors-secrets",
+          "gate_log": ".pipeline/runs/20261106-230520-gate-agent_F002-errors-secrets/container.log",
+          "evaluator_run": ".pipeline/runs/20261106-230532-evaluator-agent_F002-errors-secrets",
+          "evaluator_summary": "Adds the Error enum (identical to architecture.md, fixed-string Display, std::error::Error, Result alias) and SecretString/SecretVec/SecretBytes<N> secret containers. Each derives Zeroize+ZeroizeOnDrop, has a manual redacted Debug, and has no Display, Serialize or Clone. Only the zeroize dependency was added (derive feature). The new Cargo.lock entries are zeroize_derive and its proc-macro dependencies. I ran cargo test and all 8 core tests pass. No blocker or major findings.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 4.2341
+  "total_cost_usd": 4.4694
 }
