@@ -9,4 +9,5 @@ insecure-fast-kdf = []
 test-hooks = []
 
 [dependencies]
+getrandom = "0.4.3"
 zeroize = { version = "1", features = ["derive"] }
