@@ -1,0 +1,9 @@
+[package]
+name = "onlypassword-cli"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "onlypassword"
+path = "src/main.rs"
