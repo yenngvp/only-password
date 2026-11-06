@@ -11,6 +11,12 @@
 
 //! Core library of onlypassword.
 
+pub mod error;
+pub mod secret;
+
+pub use error::{Error, Result};
+pub use secret::{SecretBytes, SecretString, SecretVec};
+
 #[cfg(test)]
 mod tests {
     #[test]
