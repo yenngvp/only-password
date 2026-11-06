@@ -14,14 +14,63 @@ pub struct Global {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
-    Init { print_secret_key: bool },
-    AddNote { title: String, notes: NotesSource },
-    AddLogin { flags: ItemFlags },
-    Update { id: String, flags: ItemFlags },
-    Get { id: String, show_secrets: bool },
+    Init {
+        print_secret_key: bool,
+    },
+    AddNote {
+        title: String,
+        notes: NotesSource,
+    },
+    AddLogin {
+        flags: ItemFlags,
+    },
+    Update {
+        id: String,
+        flags: ItemFlags,
+    },
+    Get {
+        id: String,
+        show_secrets: bool,
+    },
     List,
-    Search { query: String },
-    Delete { id: String },
+    Search {
+        query: String,
+    },
+    Delete {
+        id: String,
+    },
+    Passwd {
+        rotate: bool,
+    },
+    RotateKey,
+    Export {
+        out: PathBuf,
+    },
+    Import {
+        input: PathBuf,
+        source_key_file: PathBuf,
+    },
+    Totp {
+        id: String,
+        time: Option<u64>,
+    },
+    GenPassword(GenPassword),
+    GenPassphrase {
+        words: usize,
+        separator: String,
+        capitalize: bool,
+        digit: bool,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct GenPassword {
+    pub length: usize,
+    pub lower: bool,
+    pub upper: bool,
+    pub digits: bool,
+    pub symbols: bool,
+    pub exclude_ambiguous: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -330,6 +379,152 @@ pub fn parse(argv: Vec<OsString>) -> Res<(Global, Command)> {
             let id = positional(&mut a, "delete needs an item id")?;
             no_more(&mut a)?;
             Command::Delete { id }
+        }
+        "passwd" => {
+            let mut rotate = false;
+            while let Some(arg) = a.next() {
+                match arg.to_str() {
+                    Some("--rotate") => switch(&mut rotate)?,
+                    _ => return usage("unknown flag or argument"),
+                }
+            }
+            Command::Passwd { rotate }
+        }
+        "rotate-key" => {
+            no_more(&mut a)?;
+            Command::RotateKey
+        }
+        "export" => {
+            let mut out = None;
+            while let Some(arg) = a.next() {
+                match arg.to_str() {
+                    Some("--out") => set_once(&mut out, PathBuf::from(a.value()?))?,
+                    _ => return usage("unknown flag or argument"),
+                }
+            }
+            Command::Export {
+                out: out.ok_or(CliError::Usage("export needs --out"))?,
+            }
+        }
+        "import" => {
+            let (mut input, mut src) = (None, None);
+            while let Some(arg) = a.next() {
+                match arg.to_str() {
+                    Some("--in") => set_once(&mut input, PathBuf::from(a.value()?))?,
+                    Some("--source-secret-key-file") => {
+                        set_once(&mut src, PathBuf::from(a.value()?))?
+                    }
+                    _ => return usage("unknown flag or argument"),
+                }
+            }
+            Command::Import {
+                input: input.ok_or(CliError::Usage("import needs --in"))?,
+                source_key_file: src
+                    .ok_or(CliError::Usage("import needs --source-secret-key-file"))?,
+            }
+        }
+        "totp" => {
+            let mut id = None;
+            let mut time = None;
+            while let Some(arg) = a.next() {
+                match arg.to_str() {
+                    Some("--time") => {
+                        let t = a
+                            .text()?
+                            .parse::<u64>()
+                            .map_err(|_| CliError::Usage("--time must be a unix time"))?;
+                        set_once(&mut time, t)?
+                    }
+                    Some(s) if !s.starts_with('-') && id.is_none() => id = Some(s.to_string()),
+                    _ => return usage("unknown flag or argument"),
+                }
+            }
+            let Some(id) = id else {
+                return usage("totp needs an item id");
+            };
+            Command::Totp { id, time }
+        }
+        "generate" => {
+            let kind = positional(&mut a, "generate needs password or passphrase")?;
+            let cmd = match kind.as_str() {
+                "password" => {
+                    let mut length = None;
+                    let (mut nl, mut nu, mut nd, mut ns, mut amb) =
+                        (false, false, false, false, false);
+                    while let Some(arg) = a.next() {
+                        match arg.to_str() {
+                            Some("--length") => {
+                                let n = a
+                                    .text()?
+                                    .parse::<usize>()
+                                    .ok()
+                                    .filter(|n| (4..=256).contains(n))
+                                    .ok_or(CliError::Usage("--length must be 4..256"))?;
+                                set_once(&mut length, n)?
+                            }
+                            Some("--no-lower") => switch(&mut nl)?,
+                            Some("--no-upper") => switch(&mut nu)?,
+                            Some("--no-digits") => switch(&mut nd)?,
+                            Some("--no-symbols") => switch(&mut ns)?,
+                            Some("--exclude-ambiguous") => switch(&mut amb)?,
+                            _ => return usage("unknown flag or argument"),
+                        }
+                    }
+                    if nl && nu && nd && ns {
+                        return usage("at least one character class is required");
+                    }
+                    Command::GenPassword(GenPassword {
+                        length: length.unwrap_or(20),
+                        lower: !nl,
+                        upper: !nu,
+                        digits: !nd,
+                        symbols: !ns,
+                        exclude_ambiguous: amb,
+                    })
+                }
+                "passphrase" => {
+                    let mut words = None;
+                    let mut separator = None;
+                    let (mut cap, mut digit) = (false, false);
+                    while let Some(arg) = a.next() {
+                        match arg.to_str() {
+                            Some("--words") => {
+                                let n = a
+                                    .text()?
+                                    .parse::<usize>()
+                                    .ok()
+                                    .filter(|n| (4..=24).contains(n))
+                                    .ok_or(CliError::Usage("--words must be 4..24"))?;
+                                set_once(&mut words, n)?
+                            }
+                            Some("--separator") => {
+                                let s = a.text()?;
+                                if s.len() > 8 || !s.is_ascii() {
+                                    return usage("--separator must be at most 8 ASCII bytes");
+                                }
+                                set_once(&mut separator, s)?
+                            }
+                            Some("--capitalize") => switch(&mut cap)?,
+                            Some("--digit") => switch(&mut digit)?,
+                            _ => return usage("unknown flag or argument"),
+                        }
+                    }
+                    Command::GenPassphrase {
+                        words: words.unwrap_or(7),
+                        separator: separator.unwrap_or_else(|| "-".to_string()),
+                        capitalize: cap,
+                        digit,
+                    }
+                }
+                _ => return usage("generate needs password or passphrase"),
+            };
+            // `generate` needs no vault or key; any given global options are ignored.
+            let global = Global {
+                vault: vault.unwrap_or_default(),
+                key_file: key_file.unwrap_or_default(),
+                stdin,
+            };
+            return Ok((global, cmd));
         }
         _ => return usage("unknown command"),
     };
