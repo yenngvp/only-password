@@ -102,6 +102,74 @@ fn pick(r: &mut dyn RandomSource, set: &[u8]) -> Result<u8> {
         .ok_or(Error::InvalidInput("index out of range"))
 }
 
+/// Options for [`generate_passphrase`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PassphraseOptions {
+    pub words: usize,
+    pub separator: String,
+    pub capitalize: bool,
+    pub include_digit: bool,
+}
+
+impl Default for PassphraseOptions {
+    fn default() -> Self {
+        PassphraseOptions {
+            words: 7,
+            separator: "-".to_string(),
+            capitalize: false,
+            include_digit: false,
+        }
+    }
+}
+
+/// Generate a word-based passphrase using the operating-system random source.
+pub fn generate_passphrase(o: &PassphraseOptions) -> Result<SecretString> {
+    generate_passphrase_with(&mut crate::rng::os_source(), o)
+}
+
+pub(crate) fn generate_passphrase_with(
+    r: &mut dyn RandomSource,
+    o: &PassphraseOptions,
+) -> Result<SecretString> {
+    if !(4..=24).contains(&o.words) {
+        return Err(Error::InvalidInput("word count out of range"));
+    }
+    if o.separator.len() > 8 || !o.separator.is_ascii() {
+        return Err(Error::InvalidInput("invalid separator"));
+    }
+    let list = bip39::Language::English.word_list();
+    let mut words: Vec<Zeroizing<String>> = Vec::with_capacity(o.words);
+    for _ in 0..o.words {
+        let i = uniform_with(r, list.len() as u64)? as usize;
+        let w = list
+            .get(i)
+            .ok_or(Error::InvalidInput("index out of range"))?;
+        let mut w = Zeroizing::new((*w).to_string());
+        if o.capitalize {
+            if let Some(first) = w.get_mut(..1) {
+                first.make_ascii_uppercase();
+            }
+        }
+        words.push(w);
+    }
+    if o.include_digit {
+        let wi = uniform_with(r, o.words as u64)? as usize;
+        let d = uniform_with(r, 10)? as u8;
+        let w = words
+            .get_mut(wi)
+            .ok_or(Error::InvalidInput("index out of range"))?;
+        w.push((b'0' + d) as char);
+    }
+    let mut out = Zeroizing::new(String::new());
+    for (i, w) in words.iter().enumerate() {
+        if i > 0 {
+            out.push_str(&o.separator);
+        }
+        out.push_str(w);
+    }
+    Ok(SecretString::new(out.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,5 +430,179 @@ mod tests {
         assert!(d.contains("redacted"));
         assert!(!d.contains(p.expose()));
         assert_eq!(p.expose().len(), 20);
+    }
+
+    // ---- passphrase ----
+    use bip39::Language;
+
+    /// Yields fixed u64 values as big-endian bytes; errors when exhausted.
+    struct Seq(Vec<u64>, usize);
+    impl RandomSource for Seq {
+        fn fill(&mut self, buf: &mut [u8]) -> Result<()> {
+            let v = *self.0.get(self.1).ok_or(Error::Rng)?;
+            self.1 += 1;
+            buf.copy_from_slice(&v.to_be_bytes()[..buf.len()]);
+            Ok(())
+        }
+    }
+
+    fn phrase(seed: u64, o: &PassphraseOptions) -> String {
+        generate_passphrase_with(&mut Stub(seed), o)
+            .unwrap()
+            .expose()
+            .to_string()
+    }
+
+    fn in_list(w: &str) -> bool {
+        Language::English.word_list().contains(&w)
+    }
+
+    #[test]
+    fn word_list_has_2048_distinct_entries() {
+        let l = Language::English.word_list();
+        assert_eq!(l.len(), 2048);
+        let set: std::collections::HashSet<_> = l.iter().collect();
+        assert_eq!(set.len(), 2048);
+    }
+
+    #[test]
+    fn passphrase_defaults() {
+        let o = PassphraseOptions::default();
+        assert_eq!(o.words, 7);
+        assert_eq!(o.separator, "-");
+        assert!(!o.capitalize && !o.include_digit);
+        let p = phrase(1, &o);
+        let parts: Vec<&str> = p.split('-').collect();
+        assert_eq!(parts.len(), 7);
+        for w in parts {
+            assert!(in_list(w), "{w}");
+        }
+    }
+
+    #[test]
+    fn passphrase_option_validation() {
+        let bad = |f: &dyn Fn(&mut PassphraseOptions)| {
+            let mut o = PassphraseOptions::default();
+            f(&mut o);
+            assert!(matches!(
+                generate_passphrase_with(&mut Stub(1), &o),
+                Err(Error::InvalidInput(_))
+            ));
+        };
+        for w in [4, 24] {
+            let o = PassphraseOptions {
+                words: w,
+                ..Default::default()
+            };
+            assert_eq!(phrase(2, &o).split('-').count(), w);
+        }
+        bad(&|o| o.words = 3);
+        bad(&|o| o.words = 25);
+        bad(&|o| o.separator = "123456789".into());
+        bad(&|o| o.separator = "\u{e9}".into());
+        bad(&|o| o.separator = "ab\u{e9}".into());
+        let ok = PassphraseOptions {
+            separator: "12345678".into(),
+            ..Default::default()
+        };
+        assert_eq!(phrase(3, &ok).matches("12345678").count(), 6);
+        let empty = PassphraseOptions {
+            separator: String::new(),
+            ..Default::default()
+        };
+        assert!(phrase(3, &empty).bytes().all(|c| c.is_ascii_lowercase()));
+    }
+
+    #[test]
+    fn passphrase_capitalize() {
+        let o = PassphraseOptions {
+            capitalize: true,
+            ..Default::default()
+        };
+        for seed in 0..20 {
+            let p = phrase(seed, &o);
+            for w in p.split('-') {
+                assert!(w.as_bytes()[0].is_ascii_uppercase(), "{w}");
+                assert!(w[1..].bytes().all(|b| b.is_ascii_lowercase()));
+                assert!(in_list(&w.to_ascii_lowercase()));
+            }
+        }
+    }
+
+    #[test]
+    fn passphrase_digit_on_exactly_one_word() {
+        let o = PassphraseOptions {
+            include_digit: true,
+            ..Default::default()
+        };
+        for seed in 0..50 {
+            let p = phrase(seed, &o);
+            assert_eq!(p.bytes().filter(|b| b.is_ascii_digit()).count(), 1);
+            let with: Vec<&str> = p
+                .split('-')
+                .filter(|w| w.ends_with(|c: char| c.is_ascii_digit()))
+                .collect();
+            assert_eq!(with.len(), 1);
+            assert!(in_list(&with[0][..with[0].len() - 1]));
+        }
+    }
+
+    #[test]
+    fn passphrase_stub_draws_map_to_expected_words() {
+        let l = Language::English.word_list();
+        // 2048 divides 2^64: no rejection, one draw per word, index = draw % 2048.
+        let o = PassphraseOptions {
+            words: 4,
+            separator: " ".into(),
+            ..Default::default()
+        };
+        let mut s = Seq(vec![0, 1, 2047, 2048 + 5], 0);
+        let p = generate_passphrase_with(&mut s, &o).unwrap();
+        assert_eq!(s.1, 4);
+        assert_eq!(
+            p.expose(),
+            &format!("{} {} {} {}", l[0], l[1], l[2047], l[5])
+        );
+        // Digit: after the words, one draw picks the word (% 4), one the digit (% 10).
+        let o = PassphraseOptions {
+            include_digit: true,
+            ..o
+        };
+        let mut s = Seq(vec![0, 1, 2047, 5, 6, 17], 0);
+        let p = generate_passphrase_with(&mut s, &o).unwrap();
+        assert_eq!(s.1, 6);
+        assert_eq!(
+            p.expose(),
+            &format!("{} {} {}7 {}", l[0], l[1], l[2047], l[5])
+        );
+    }
+
+    #[test]
+    fn passphrase_rng_failure() {
+        for d in [false, true] {
+            let o = PassphraseOptions {
+                include_digit: d,
+                ..Default::default()
+            };
+            assert!(matches!(
+                generate_passphrase_with(&mut Failing, &o),
+                Err(Error::Rng)
+            ));
+        }
+        let o = PassphraseOptions {
+            words: 4,
+            include_digit: true,
+            ..Default::default()
+        };
+        assert!(matches!(
+            generate_passphrase_with(&mut Seq(vec![0; 4], 0), &o),
+            Err(Error::Rng)
+        ));
+    }
+
+    #[test]
+    fn passphrase_os_source_works() {
+        let p = generate_passphrase(&PassphraseOptions::default()).unwrap();
+        assert_eq!(p.expose().split('-').count(), 7);
     }
 }

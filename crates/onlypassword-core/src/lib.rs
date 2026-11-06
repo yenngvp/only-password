@@ -26,7 +26,7 @@ mod testutil;
 pub mod vault;
 
 pub use error::{Error, Result};
-pub use generator::{generate_password, PasswordOptions};
+pub use generator::{generate_passphrase, generate_password, PassphraseOptions, PasswordOptions};
 pub use item::{
     CustomField, Item, ItemId, ItemKind, TotpAlgorithm, TotpConfig, MAX_ITEM_PLAINTEXT,
 };
