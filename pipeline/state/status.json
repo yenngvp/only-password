@@ -296,7 +296,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F020-cli-items": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.5745,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-003841-generator-agent_F020-cli-items",
+          "gate_log": ".pipeline/runs/20261107-004228-gate-agent_F020-cli-items/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-004349-evaluator-agent_F020-cli-items",
+          "evaluator_summary": "Adds add-login and update with the full architecture.md section 5 item-flag set. The hand-written parser (args.rs item_flags) rejects TOTP parameter flags without --totp, clear+setter conflicts, --notes with --notes-file, bad ranges, and --field without '=' with exit 2, all before any prompt. cmd.rs follows the prompt order master, password, TOTP, notes, hidden values. TOTP goes through normalize_totp_secret, and --url / --field / --totp replace as specified. Note-illegal flags are rejected by core validation with exit 1. I ran cargo test --all-features -p onlypassword-cli and all 9 unit and 16 e2e tests pass. The new e2e tests check stored values through the core library, check revisions for no-change cases, and check argv for secret values. All criteria are met. Only minor findings remain.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 12.2246
+  "total_cost_usd": 12.7991
 }
