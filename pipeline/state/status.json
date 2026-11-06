@@ -236,7 +236,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F016-generator-passphrase": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.3283,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-001215-generator-agent_F016-generator-passphrase",
+          "gate_log": ".pipeline/runs/20261107-001516-gate-agent_F016-generator-passphrase/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-001644-evaluator-agent_F016-generator-passphrase",
+          "evaluator_summary": "Adds PassphraseOptions (defaults 7/'-'/false/false), generate_passphrase (OS source) and pub(crate) generate_passphrase_with in generator.rs, re-exported from lib.rs. Validates words 4..=24 and separator <=8 ASCII before drawing, picks words via uniform_with(2048), ASCII-uppercases the first byte, appends one uniform digit to one uniformly chosen word, and holds intermediates in Zeroizing before returning a SecretString. bip39 is listed in approved-deps, added with default-features=false (no features, no rand; Cargo.lock shows only bitcoin_hashes as a dependency), and the feature set is recorded in agent-notes. I ran the generator tests (21 pass). Tests are meaningful: exact word mapping with a fixed-sequence stub, draw counts, boundaries, and Rng failure. No blocker or major issues.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 9.9234
+  "total_cost_usd": 10.2517
 }
