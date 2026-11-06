@@ -266,7 +266,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F018-export-import": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.9159,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-002254-generator-agent_F018-export-import",
+          "gate_log": ".pipeline/runs/20261107-002856-gate-agent_F018-export-import/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-003006-evaluator-agent_F018-export-import",
+          "evaluator_summary": "Adds Vault::export/import (vault/export.rs), MAX_EXPORT_PLAINTEXT, and small refactors in item.rs to share wire types. Header layout, Argon2id on NFKC password, HKDF INFO_EXPORT over pw_key||SK with salt, AD_X = label||header[0..74], the compact fixed-order payload, the CS 9 export-table order (magic, version, flags, kdf ids, KDF bounds, ct_len, decrypt, schema probes, strict pass, conflict, limits), bounded read, single commit write, same-file rejection and the password minimum on export only all match the spec by reading. I ran `cargo test -p onlypassword-core export`: 16 passed. Tests cover every acceptance criterion with real assertions (independent K_x derivation, every-offset flip and truncation loops with the target file unchanged, hand-sealed schema-2 and u64::MAX revision payloads, symlink target). No panics on untrusted lengths (checked arithmetic, .get slicing), and secrets are held in Zeroizing/SecretVec. Minor notes only.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 10.5851
+  "total_cost_usd": 11.501
 }
