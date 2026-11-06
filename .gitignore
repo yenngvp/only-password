@@ -1,0 +1,5 @@
+/target/
+/.pipeline/
+*.swp
+.DS_Store
+__pycache__/

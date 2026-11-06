@@ -1,0 +1,39 @@
+# Limits for the agent pipeline. Budgets are per session, in US dollars as
+# reported by Claude Code (an estimate when running on a subscription).
+
+[limits]
+max_attempts = 3      # generator attempts per feature before it is marked blocked
+max_run_usd = 60      # one `run.py build` invocation stops starting new work past this
+
+[container]
+memory = "8g"
+cpus = 4
+pids = 1024
+
+# model = "" means the account's default model. effort = "" means the default.
+[planner]
+budget_usd = 15
+timeout_min = 60
+model = ""
+effort = ""
+
+[critic]
+budget_usd = 10
+timeout_min = 45
+model = ""
+effort = ""
+
+[generator]
+budget_usd = 10
+timeout_min = 60
+model = ""
+effort = ""
+
+[evaluator]
+budget_usd = 5
+timeout_min = 30
+model = ""
+effort = ""
+
+[gate]
+timeout_min = 30

@@ -1,0 +1,41 @@
+# Supply-chain policy enforced by the gate (cargo-deny). Protected: agents
+# cannot change this file.
+
+[graph]
+all-features = true
+
+[advisories]
+# Baked into the agent image at build time; containers cannot reach GitHub.
+db-path = "/opt/advisory-dbs"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "0BSD",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+# The workspace's own crates set `publish = false` and need no license field.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
