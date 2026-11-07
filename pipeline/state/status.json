@@ -395,7 +395,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F025-core-index": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.592,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-082105-generator-agent_F025-core-index",
+          "gate_log": ".pipeline/runs/20261107-083141-gate-agent_F025-core-index/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-083842-evaluator-agent_F025-core-index",
+          "evaluator_summary": "Adds ItemIndex (vault/index.rs) and Vault::index(). The index is built in from_parts (create/unlock) with one decryption pass. add/update/delete/import derive the new index from the old one and replace file and index together in commit_with_index, only after persist succeeds. Rekey operations leave the index untouched, which is correct because titles, usernames, URLs, revisions and updated_ms do not change. search applies the lowercase-contains rule to stored summaries. Debug is the fixed string 'ItemIndex { .. }' and Drop zeroizes the owned strings. decrypt_count is gated on test-hooks or cfg(test). There is no file-format or crypto change, and the pilot tests are untouched. I ran `cargo test -p onlypassword-core --features test-hooks` (197 + 14 tests pass, including all 6 new index tests) and `cargo test --workspace` (core and CLI pass). I did not rerun gate.sh. I checked the criteria by reading the tests and code.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 16.8741
+  "total_cost_usd": 17.4661
 }
