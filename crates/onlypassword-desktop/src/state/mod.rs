@@ -14,6 +14,7 @@ pub mod settings;
 
 use std::time::Duration;
 
+use crate::clipboard::{ClipboardBackend, ClipboardService};
 use crate::clock::UiClock;
 use crate::config::{Config, ConfigStore};
 use crate::error::UiError;
@@ -25,10 +26,19 @@ use settings::SettingsForm;
 /// Everything the state machine needs from the outside world.
 pub struct AppDeps {
     pub clock: Box<dyn UiClock>,
+    pub clipboard: Box<dyn ClipboardBackend>,
     pub picker: Box<dyn FilePicker>,
     pub config_store: Option<ConfigStore>,
     /// KDF cost for new vaults (`KdfParams::DEFAULT` in the real app).
     pub kdf: KdfParams,
+}
+
+/// `AppDeps` minus the clipboard backend, which the clipboard service owns.
+struct Deps {
+    clock: Box<dyn UiClock>,
+    picker: Box<dyn FilePicker>,
+    config_store: Option<ConfigStore>,
+    kdf: KdfParams,
 }
 
 /// The screen currently shown.
@@ -67,6 +77,8 @@ pub enum Action {
     Search(String),
     Select(ItemId),
     ToggleReveal(FieldRef),
+    /// Put a field of the open item on the clipboard.
+    Copy(FieldRef),
     /// Leave the detail screen.
     Back,
     /// User input happened: restart the idle timer.
@@ -99,7 +111,8 @@ pub struct CreateForm {
 
 /// The whole UI state. No `Clone`; `Debug` is redacted.
 pub struct AppState {
-    deps: AppDeps,
+    deps: Deps,
+    clipboard: ClipboardService,
     config: Config,
     screen: Screen,
     notice: Option<UiError>,
@@ -125,6 +138,19 @@ impl fmt::Debug for AppState {
 impl AppState {
     /// Load the config; start on Unlock if a last vault is known, else Open.
     pub fn new(deps: AppDeps) -> AppState {
+        let AppDeps {
+            clock,
+            clipboard,
+            picker,
+            config_store,
+            kdf,
+        } = deps;
+        let deps = Deps {
+            clock,
+            picker,
+            config_store,
+            kdf,
+        };
         let (config, notice) = match &deps.config_store {
             Some(store) => store.load(),
             None => (Config::default(), None),
@@ -142,7 +168,12 @@ impl AppState {
             deps.clock.now(),
         );
         let settings = SettingsForm::from_config(&config);
+        let clipboard = ClipboardService::new(
+            clipboard,
+            Duration::from_secs(u64::from(config.clipboard_clear_secs)),
+        );
         AppState {
+            clipboard,
             idle,
             settings,
             settings_return: Screen::Unlock,
@@ -172,6 +203,7 @@ impl AppState {
             && self.open.password.is_empty()
             && self.create.password.is_empty()
             && self.create.confirm.is_empty()
+            && self.clipboard.is_clean()
             && matches!(
                 self.screen,
                 Screen::Open | Screen::Create | Screen::Unlock | Screen::Settings
@@ -203,6 +235,9 @@ impl AppState {
     /// Timers. The idle lock comes first, before any other pending work.
     pub fn tick(&mut self) {
         self.check_idle();
+        if let Err(e) = self.clipboard.poll(self.deps.clock.now()) {
+            self.notice = Some(e);
+        }
     }
 
     /// Lock when the idle timeout has passed. The timer is armed only while
@@ -228,9 +263,11 @@ impl AppState {
                     self.idle.touch(self.deps.clock.now());
                 }
             }
-            Action::Search(_) | Action::Select(_) | Action::ToggleReveal(_) | Action::Back => {
-                self.browse_action(action)
-            }
+            Action::Search(_)
+            | Action::Select(_)
+            | Action::ToggleReveal(_)
+            | Action::Copy(_)
+            | Action::Back => self.browse_action(action),
             Action::ShowSettings => self.show_settings(),
             Action::CloseSettings => self.close_settings(),
             Action::SaveSettings => self.save_settings(),
@@ -393,6 +430,8 @@ impl AppState {
     }
 
     fn lock_now(&mut self) {
+        // A failed clear is dropped: the lock must not depend on the clipboard.
+        let _ = self.clipboard.clear_now();
         if let Some(session) = self.session.take() {
             let Session { vault, key, .. } = session;
             vault.lock();

@@ -61,6 +61,19 @@ impl fmt::Debug for Detail {
     }
 }
 
+impl Detail {
+    /// The text of a field, if the item has it.
+    fn field_text(&self, f: FieldRef) -> Option<&str> {
+        let item = &self.0.item;
+        match f {
+            FieldRef::Password => item.password.as_ref().map(|p| p.expose()),
+            FieldRef::Notes => Some(item.notes.expose()),
+            FieldRef::TotpSecret => item.totp.as_ref().map(|t| t.secret.expose()),
+            FieldRef::Custom(i) => item.fields.get(i).map(|c| c.value.expose()),
+        }
+    }
+}
+
 /// Browse-related part of the session. Dropping it zeroizes the rows and the search text.
 #[derive(Default)]
 pub(super) struct BrowseState {
@@ -150,6 +163,21 @@ impl AppState {
             return;
         };
         match action {
+            Action::Copy(f) => {
+                if !matches!(self.screen, Screen::Detail(_)) {
+                    return;
+                }
+                let Some(d) = &session.browse.detail else {
+                    return;
+                };
+                let Some(text) = d.field_text(f) else {
+                    return;
+                };
+                let now = self.deps.clock.now();
+                if let Err(e) = self.clipboard.copy(text, now) {
+                    self.notice = Some(e);
+                }
+            }
             Action::Search(text) => {
                 if self.screen != Screen::Browse {
                     return;

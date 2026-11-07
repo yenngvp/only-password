@@ -213,6 +213,12 @@ pub fn browse(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
     action
 }
 
+fn copy_button(ui: &mut egui::Ui, name: &str, field: FieldRef, action: &mut Option<Action>) {
+    if ui.button(format!("Copy {name}")).clicked() {
+        *action = Some(Action::Copy(field));
+    }
+}
+
 /// One masked field: placeholder (or the revealed text) and a Reveal/Hide toggle.
 fn masked(
     ui: &mut egui::Ui,
@@ -230,6 +236,7 @@ fn masked(
         if ui.button(format!("{verb} {name}")).clicked() {
             *action = Some(Action::ToggleReveal(field));
         }
+        copy_button(ui, name, field, action);
     });
 }
 
@@ -287,7 +294,10 @@ pub fn detail(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
                                 &mut action,
                             );
                         } else {
-                            ui.label(format!("{}: {}", c.name, c.value.expose()));
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{}: {}", c.name, c.value.expose()));
+                                copy_button(ui, &c.name, FieldRef::Custom(i), &mut action);
+                            });
                         }
                     });
                 }

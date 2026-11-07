@@ -2,6 +2,7 @@
 
 use onlypassword_core::crypto::kdf::KdfParams;
 
+use crate::clipboard::ArboardBackend;
 use crate::clock::SystemUiClock;
 use crate::config::ConfigStore;
 use crate::picker::RfdPicker;
@@ -20,6 +21,7 @@ impl DesktopApp {
     pub fn new() -> Self {
         let deps = AppDeps {
             clock: Box::new(SystemUiClock::new()),
+            clipboard: Box::new(ArboardBackend::new()),
             picker: Box::new(RfdPicker::new()),
             config_store: ConfigStore::platform_default(),
             kdf: KdfParams::DEFAULT,
