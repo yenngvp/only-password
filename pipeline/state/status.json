@@ -545,7 +545,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F035-desktop-maintenance": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.8653,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-124052-generator-agent_F035-desktop-maintenance",
+          "gate_log": ".pipeline/runs/20261107-125157-gate-agent_F035-desktop-maintenance/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-130022-evaluator-agent_F035-desktop-maintenance",
+          "evaluator_summary": "Adds state::maintenance (MaintenanceKind, MaintenanceForm with redacted Debug, Submit/Cancel/Show actions), UiError::ConfirmationRequired, views and a Maintenance menu. Change password (rotate on/off), rotate key, export and import call the core with the session's SecretKey and deps.kdf. Password mismatch is rejected before any core call. Paths from the pickers are passed unmodified. Buffers are wiped after every submit, cancel, lock, idle expiry and ShowSettings, and is_clean() covers them. I ran `cargo test -p onlypassword-desktop` and all suites pass, including tests/maintenance.rs. I did not run the gate or the cross-target checks (the gate already passed per the task). I read the code and tests and found no blocker or major issue. Only protected-path check: no spec/pipeline/.claude/.github/CLAUDE.md changes.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 23.5897
+  "total_cost_usd": 24.455
 }
