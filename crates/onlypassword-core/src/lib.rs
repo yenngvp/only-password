@@ -17,6 +17,7 @@ pub mod error;
 pub mod format;
 pub mod generator;
 pub mod item;
+pub mod keyfile;
 pub mod rng;
 pub mod seal;
 pub mod secret;
