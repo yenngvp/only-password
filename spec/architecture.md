@@ -392,3 +392,213 @@ never overwrite an existing one.
 - **Gate**: tests must be deterministic, offline, and finish in a few minutes in total
   (`KdfParams::FAST_FOR_TESTS` everywhere except the one default-params test and the CLI e2e, which
   runs the real defaults a handful of times).
+
+---
+
+# Phase 2 — desktop application
+
+Sections 1–6 describe the pilot and are unchanged. The CLI (§5) stays exactly as it is, including
+its private `keyfile` module; it is not refactored onto the new core helpers. Names below are the
+contract between this document, `requirements.md` and `features.json`; a generator that wants a
+different name records it in `agent-notes/spec-issues.md`.
+
+## 7. `crates/onlypassword-desktop`
+
+### 7.1 Core additions (own features, before the GUI uses them)
+
+The code in `crates/onlypassword-core` is authoritative for existing signatures (the §2 sketch is
+informative; e.g. `add`/`update` take `&Item`). Phase 2 adds exactly these public items:
+
+```rust
+// module `vault` (re-exported at the crate root)
+pub struct ItemIndex { /* Vec<ItemSummary> sorted as list(); zeroizes on drop */ }
+impl ItemIndex {
+    pub fn entries(&self) -> &[ItemSummary];
+    pub fn search(&self, query: &str) -> Vec<&ItemSummary>;   // same rule as Vault::search
+    pub fn len(&self) -> usize;  pub fn is_empty(&self) -> bool;
+}
+impl Vault { pub fn index(&self) -> &ItemIndex; }              // built at create/unlock
+
+// new module `keyfile` (pub mod keyfile)
+pub fn read(path: &Path) -> Result<SecretKey>;                 // <= 4096 bytes, trim ASCII ws, from_text
+pub fn write_new(path: &Path, key: &SecretKey) -> Result<()>;  // create_new, 0600 (unix), text + "\n", sync_all
+impl Vault {
+    pub fn create_with_key_file(vault_path: &Path, key_path: &Path, password: &SecretString,
+                                params: KdfParams) -> Result<Vault>;   // init order of §5
+}
+```
+
+`Vault` keeps the index next to the parsed file and replaces it together with `self.file` after a
+successful write (REQ-LIF-012). `ItemIndex` implements `Debug` (redacted) and `Drop` zeroizing every
+string it owns. `Vault::list`/`search` keep their behaviour; the index only avoids decrypting every
+record per keystroke. For test determinism a counter of record decryptions is exposed under the
+existing `test-hooks` feature (`Vault::decrypt_count()`), used to show `index().search` decrypts
+nothing.
+
+### 7.2 Layout
+
+Library `onlypassword_desktop` (`src/lib.rs`) plus a thin binary (`src/main.rs`), both with
+`#![forbid(unsafe_code)]` and the panic-free `cfg_attr` of §1. The root `Cargo.toml` `members` list
+gains `crates/onlypassword-desktop`. `publish = false`, edition 2021. The crate has no cargo features.
+
+| module | content | depends on egui? |
+|---|---|---|
+| `error` | `UiError` (§7.6) | no |
+| `secret_buf` | `SecretBuf`: a `Zeroizing<String>` created with capacity 1 024 (limit 64 KiB, CS §10 notes limit), `push_str`, `clear`, `expose()`, redacted `Debug`; never `Clone` | no |
+| `clock` | trait `UiClock { fn now(&self) -> Duration /* monotonic since start */; fn unix_secs(&self) -> u64 }`, `SystemUiClock`, and a public `ManualClock` (shared handle, `advance(Duration)`, `set_unix(u64)`) for tests | no |
+| `config` | `Theme { System, Light, Dark }`, `Config { idle_timeout_secs: u64, clipboard_clear_secs: u64, theme: Theme, last_vault_path: Option<PathBuf> }`, `Config::default()`, `Config::validate()`, `ConfigStore { dir: PathBuf }` with `ConfigStore::new(dir)`, `ConfigStore::platform_default() -> Option<ConfigStore>` (via `directories::ProjectDirs::from("", "", "onlypassword")`), `load() -> (Config, Option<UiError>)`, `save(&Config) -> Result<(), UiError>` | no |
+| `clipboard` | trait `ClipboardBackend { fn get_text(&mut self) -> Result<Option<String>, ()>; fn set_secret_text(&mut self, text: &str) -> Result<(), ()>; fn clear(&mut self) -> Result<(), ()>; }` (errors are mapped to `UiError::Clipboard`, no detail kept), `ArboardBackend` (real, cfg-gated parts), public `MemoryClipboard` (shared handle, records `sensitive` flag, can be told to fail), and `ClipboardService` (§7.4) | no |
+| `picker` | trait `FilePicker { fn pick_vault(&mut self) -> Option<PathBuf>; fn pick_key_file(&mut self) -> Option<PathBuf>; fn save_vault(&mut self) -> Option<PathBuf>; fn save_key_file(&mut self) -> Option<PathBuf>; fn pick_export(&mut self) -> Option<PathBuf>; fn save_export(&mut self) -> Option<PathBuf>; }`, `RfdPicker` (real), public `ScriptedPicker` (queue of answers) | no |
+| `state` | `AppState`, `Screen`, `Action`, `Session`, `Draft`, `Notice`, sub-modules `session`, `browse`, `edit`, `generator`, `maintenance`, `idle`, `settings` | no |
+| `view` | `show(ctx: &egui::Context, state: &mut AppState)` and one function per screen (`view::open`, `create`, `unlock`, `browse`, `detail`, `edit`, `generator`, `maintenance`, `settings`), plus `view::secret_edit` (the egui `TextBuffer` adapter, §7.3) | yes |
+| `app` | `DesktopApp` implementing `eframe::App`: builds `AppState` from real dependencies, forwards frame input activity, calls `view::show`, schedules repaints (`request_repaint_after` ≤ 1 s while unlocked so timers fire), performs `AppState::on_exit` | yes |
+
+Only `view` and `app` (and `main.rs`) may name `egui`/`eframe`; a test greps `src/state`, `src/error.rs`,
+`src/secret_buf.rs`, `src/clock.rs`, `src/config.rs`, `src/clipboard.rs` and `src/picker.rs` for
+`egui` and `eframe` — except that `clipboard.rs` and `picker.rs` may name `arboard` and `rfd`.
+
+### 7.3 State machine and secrets in the UI
+
+```rust
+pub struct AppDeps { pub clock: Box<dyn UiClock>, pub clipboard: Box<dyn ClipboardBackend>,
+                     pub picker: Box<dyn FilePicker>, pub config_store: Option<ConfigStore>,
+                     pub kdf: KdfParams /* default KdfParams::DEFAULT */ }
+pub enum Screen { Open, Create, Unlock, Browse, Detail(ItemId), Edit(Option<ItemId>),
+                  Generator, Maintenance(MaintenanceKind), Settings }
+impl AppState {
+    pub fn new(deps: AppDeps) -> AppState;             // loads config; Screen::Open (or Unlock if last_vault_path is set)
+    pub fn dispatch(&mut self, action: Action);        // never panics; failures become `notice()`
+    pub fn tick(&mut self);                            // idle timer, TOTP rollover, clipboard deadline
+    pub fn screen(&self) -> &Screen;
+    pub fn notice(&self) -> Option<&UiError>;          // last fixed message, cleared by the next action
+    pub fn is_clean(&self) -> bool;                    // REQ-LOCK-003
+    pub fn on_exit(&mut self);                         // REQ-CLIP-004
+    /// read-only views for rendering and tests (rows, selected item, totp display, ...)
+}
+```
+
+`Action` is an enum covering every user intent (`SubmitOpen`, `SubmitCreate`, `Lock`, `Search(String)`,
+`Select(ItemId)`, `ToggleReveal(FieldRef)`, `Copy(FieldRef)`, `BeginEdit`, `BeginAdd(ItemKind)`,
+`SaveDraft`, `CancelDraft`, `ConfirmDelete`, `GenerateNow`, `UseGenerated`, `SubmitChangePassword`,
+`SubmitRotate`, `SubmitExport`, `SubmitImport`, `SaveSettings`, `Activity`, …); the exact variant set
+is the generator's, and tests only use `dispatch`, `tick` and the read-only views. Text the user is
+typing goes into form buffers owned by the state (`SecretBuf` for secrets, plain `String` for
+non-secrets such as paths and the search text) through setter actions or direct access to the
+buffers from `view`.
+
+`Session` holds, while unlocked: the `Vault`, the `SecretKey` (needed for export and password
+change), the cached rows (`Vec<Row>` copied from `Vault::index()`; `Row` is a plain struct that
+implements `Zeroize` and zeroizes on drop), and the open detail (`StoredItem`) or `Draft`. Dropping
+the `Session` (which `Action::Lock`, the idle timer and `on_exit` do) drops all of it; `Vault::lock`
+is called explicitly first. `AppState` has no `Clone` and a redacted `Debug` that prints only the
+screen name and booleans. `is_clean()` is true iff: no `Session`; all `SecretBuf`s are empty; no
+`Draft`; no generated value; revealed set empty; the clipboard service has no pending digest;
+the screen is `Open`, `Create`, `Unlock` or `Settings`.
+
+**Secret text in egui.** A `Draft` holds `SecretBuf`s for the password, notes, TOTP secret and
+hidden field values (and plain `String`s for title, username, URLs and field names, which are not
+secrets, §4.8). `view::secret_edit` wraps a `&mut SecretBuf` in a private newtype implementing
+`egui::TextBuffer`, so `egui::TextEdit` edits the zeroizing buffer in place and egui never receives a
+`String` copy; widgets are `.password(true)` while masked. Because egui keeps text in its own caches
+(edit state with undo history, galley cache), the view calls `ctx.memory_mut(|m| m.data.clear())`
+and, where the egui version has it, `ctx.forget_all_images()` whenever a form is submitted,
+cancelled or the state becomes clean, and stores no secret in egui memory through its own code
+(`ctx.data_mut`, `persist`). Residual: egui's layout of a *revealed* value contains a copy in
+the galley cache until it is evicted; this is a documented limit (threat-model §7).
+
+**Masked rendering.** A masked secret (detail view) is drawn as a fixed placeholder label (`••••••••`,
+always eight bullets, independent of length) next to "Reveal" and "Copy" buttons; the secret is
+read from the `StoredItem` only when the user toggles reveal or presses copy. Revealed text is drawn
+once per frame from the held `SecretString::expose()` as a `Label`; no secret is ever formatted into a
+widget id, accessibility label or tooltip.
+
+**Reveal set.** `FieldRef { Password, Notes, TotpSecret, Custom(usize) }`; the state keeps a
+`BTreeSet<FieldRef>` cleared by lock, selection change and edit.
+
+**Idle timer.** `IdleTimer { timeout: Duration, last_activity: Duration }` in `state::idle`;
+`touch(now)`, `expired(now)`, `set_timeout`. `DesktopApp::update` dispatches `Action::Activity` when the
+frame's input has events or pointer movement; `tick()` locks when `expired(clock.now())`. Locking happens
+before any other pending action of that tick (REQ-LOCK-005). The timer is only armed while a `Session`
+exists.
+
+**Blocking operations.** Argon2id (64 MiB, about one second) runs synchronously inside `dispatch`;
+the view shows a "Working…" notice for that frame. Native file dialogs are blocking calls on the UI
+thread inside `FilePicker`; the idle timer is re-evaluated on the next `tick` (REQ-LOCK-005).
+
+### 7.4 Clipboard service
+
+`ClipboardService { backend, timeout, pending: Option<Pending { digest: [u8; 32], deadline: Duration }> }`.
+`copy(&mut self, text: &str, now)` calls `backend.set_secret_text(text)`, stores `SHA-256(text)` (the
+`sha2` crate) and `now + timeout`, replacing any earlier pending value. `poll(now)` does nothing before
+the deadline; at or after it, `clear_if_ours()`: read the clipboard once, and only if the text's
+digest equals the pending digest call `backend.clear()`; then forget the pending value either way.
+`clear_now()` (lock, exit) is `clear_if_ours()` without the deadline. The digest is compared with
+`==` on non-secret-dependent data (a hash of a value the app itself just wrote; no attacker-visible
+oracle), which is the one place where §4.7's "no hand-written comparison" is knowingly relaxed. The
+real backend, `ArboardBackend`, wraps `arboard::Clipboard` and, behind `cfg(target_os = …)`, asks
+the platform to exclude the entry from clipboard history/cloud sync where arboard offers it; where it
+does not, it is a plain `set_text`. `set_secret_text` is the only way the app writes the clipboard.
+
+### 7.5 Config module
+
+`ConfigStore::load` reads `config.json` through a bounded read (≤ 4 096 bytes), parses it with
+`serde_json` into a struct with `#[serde(deny_unknown_fields)]`, validates ranges (REQ-CFG-003), and
+returns `(Config::default(), Some(UiError::ConfigInvalid))` on any problem. `save` serializes only the
+`Config` struct (so nothing else can leak in), writes `config.json.tmp` (0600 on Unix), `sync_all`,
+renames over `config.json`, and removes the temporary file on failure. `last_vault_path` is stored with
+`to_str` (a non-UTF-8 path is simply not stored). Defaults: idle 300 s, clipboard 30 s, theme System.
+A test serializes a `Config` and asserts that the set of JSON keys is exactly the five of REQ-CFG-002.
+
+### 7.6 Error surface
+
+`UiError` is a closed enum with `Display` giving fixed strings; it has no `String` payloads:
+
+```rust
+pub enum UiError {
+    Core(onlypassword_core::Error),   // Display = the core's fixed text; Authentication is one message
+    PasswordMismatch, EmptyField, NoSelection,
+    Clipboard, ConfigInvalid, ConfigWrite, InvalidSetting,
+    PickerCancelled,                  // not shown; ends the action silently
+}
+```
+
+`impl From<onlypassword_core::Error> for UiError`. Unlock failures with `Authentication` show the
+single sentence of the core; no code path distinguishes password from key. The view prints
+`notice().to_string()` only. No message contains a path, a value or a key; tests iterate every
+`UiError` variant and the core `Error` variants and assert that the strings are literals from a
+fixed list.
+
+### 7.7 Dependencies and portability rules
+
+Direct dependencies of the desktop crate are the ones marked "desktop" in `approved-deps.txt`.
+All work in the library is `cfg`-free except: `ArboardBackend` extension traits (`cfg(windows)`,
+`cfg(target_os = "macos")`, `cfg(all(unix, not(target_os = "macos")))`), the 0600 permission calls
+(`cfg(unix)`), and `RfdPicker` (rfd's backends are selected by rfd itself). Nothing in the crate
+may call a Linux-only API outside such a gate. The two cross targets only `cargo check` (all
+targets, all features, offline, locked); linking and running them is not done by the pipeline, so
+the generator must not add `build.rs` scripts or native libraries beyond what the approved crates
+bring. The agent container's system libraries are pkg-config, libwayland-dev, libxkbcommon-dev, libgtk-3-dev,
+libgl1-mesa-dev, libegl1-mesa-dev, libfontconfig1-dev and libssl-dev; a feature that needs a different system library is a
+spec issue, not a Dockerfile change.
+
+### 7.8 Test strategy (desktop)
+
+- **State-machine tests** (`crates/onlypassword-desktop/tests/*.rs` and inline): build an `AppState`
+  with `ManualClock`, `MemoryClipboard`, `ScriptedPicker`, a `ConfigStore` over a `tempfile`
+  directory and `KdfParams::FAST_FOR_TESTS`. The desktop crate's `[dev-dependencies]` enable the core
+  features `insecure-fast-kdf` and `test-hooks` (never `[dependencies]`; REQ-GUI-074); only the
+  end-to-end test (F037) uses default parameters. Tests drive `dispatch` and `tick`, never sleep.
+- **View tests** with `egui_kittest` (`Harness::new_state`, running `view::show` over an `AppState`):
+  find widgets by accessibility label, click, type, and assert both on the state and on the
+  accessibility tree (for example that a masked password's text appears nowhere in the tree). No
+  snapshot (image) tests, no `wgpu` feature, no real window.
+- **Sentinel scans**: tests put distinctive fake values (`"pw-SENTINEL-…"`) in items, then assert
+  they are absent from `format!("{:?}", state)`, from every `UiError` string, from the config file
+  and from `MemoryClipboard` after the clear.
+- **Source-scan tests**: no `println!`-family or logging macros, no `std::net`, no `egui` outside
+  `view`/`app`/`main`, no network crates in `Cargo.lock` (denylist: `reqwest`, `hyper`, `ureq`,
+  `isahc`, `curl`, `surf`, `attohttpc`, `native-tls`, `rustls`, `openssl`, `tokio`, `async-std`,
+  `zbus`, `ashpd`, `sentry`, `opentelemetry`; `openssl-sys` must not appear either).
+- **Gate**: runs the whole suite on Linux without a display; the real `main.rs` window is never
+  opened by a test.
+- **Real-window smoke** (not in the gate): `cargo run -p onlypassword-desktop` by a person.

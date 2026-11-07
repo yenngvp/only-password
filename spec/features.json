@@ -689,6 +689,473 @@
         "REQ-CLI-007",
         "REQ-CLI-008"
       ]
+    },
+    {
+      "id": "F024-desktop-skeleton",
+      "title": "Desktop crate skeleton with a minimal eframe window and headless smoke test",
+      "description": "Create crates/onlypassword-desktop (library onlypassword_desktop, binary onlypassword-desktop; publish = false, edition 2021, no cargo features) and add it to the `members` list of the root Cargo.toml. Both roots carry #![forbid(unsafe_code)] and the panic-free cfg_attr lints of architecture.md section 1. Add only the dependencies this feature needs from spec/approved-deps.txt: onlypassword-core (path), eframe (default-features = false, glow, default_fonts, wayland, x11; no persistence), egui, and egui_kittest as a dev-dependency; dev-dependencies of the core with features insecure-fast-kdf and test-hooks may be declared now or later but never in [dependencies]. Create the module skeleton of architecture.md 7.2 that this feature needs: `app` (DesktopApp implementing eframe::App), `view` (a `show(ctx, &mut AppState)` that draws a heading `onlypassword` and the text `Locked` inside a CentralPanel), and `state` with a minimal `AppState` (a temporary `AppState::default()` that later features replace with `AppState::new(AppDeps)`, with a `screen()` returning `Screen::Open`). main.rs builds `eframe::NativeOptions` (default renderer = glow), a fixed title `onlypassword`, and calls eframe::run_native; it is the only call site. The smoke test runs `view::show` through egui_kittest::Harness (no window, no display) and finds the heading by its label. Record the exact eframe/egui/egui_kittest versions and feature sets used, the licence results, and the outcome of the two cross-target checks in agent-notes/F024-desktop-skeleton.md; if a crate cannot be checked for a cross target, write agent-notes/spec-issues.md and dep-requests.md rather than adding anything not approved. The core and CLI crates are not modified.",
+      "depends_on": [
+        "F023-e2e"
+      ],
+      "acceptance": [
+        "bash /src/pipeline/gate.sh prints GATE PASSED, including the `portability` step: `ok: x86_64-pc-windows-msvc` and `ok: aarch64-apple-darwin` (or `skipped:` only if the target is not installed in the image; the note says which happened)",
+        "Cargo.toml members now include crates/onlypassword-desktop; Cargo.lock is committed and up to date; `cargo build -p onlypassword-desktop` produces a binary named onlypassword-desktop",
+        "Both crate roots of the desktop crate begin with #![forbid(unsafe_code)] and carry the panic-free cfg_attr",
+        "Every direct dependency of the desktop crate appears in spec/approved-deps.txt; eframe is configured without the persistence feature; no `[dependencies]` entry of the desktop crate enables insecure-fast-kdf or test-hooks",
+        "A test in crates/onlypassword-desktop/tests/ builds an egui_kittest Harness around view::show, runs a frame without a window or display, and asserts that a node labelled `onlypassword` exists",
+        "eframe::run_native appears only in crates/onlypassword-desktop/src/main.rs",
+        "`git diff --stat` against the previous commit shows no change under crates/onlypassword-core or crates/onlypassword-cli, and the pilot tests still pass",
+        "agent-notes/F024-desktop-skeleton.md records dependency versions, feature sets, licence outcome and cross-target outcome"
+      ],
+      "spec_refs": [
+        "architecture.md#7-cratesonlypassword-desktop",
+        "architecture.md#72-layout",
+        "architecture.md#77-dependencies-and-portability-rules",
+        "architecture.md#78-test-strategy-desktop",
+        "approved-deps.txt"
+      ],
+      "requirements": [
+        "REQ-GUI-073",
+        "REQ-GUI-074",
+        "REQ-GUI-075",
+        "REQ-GUI-076",
+        "REQ-BLD-001",
+        "REQ-SEC-005"
+      ]
+    },
+    {
+      "id": "F025-core-index",
+      "title": "Core: item index for list views",
+      "description": "In crates/onlypassword-core add `ItemIndex` and `Vault::index()` exactly as architecture.md 7.1. The index is a sorted Vec<ItemSummary> (order of list(): title.to_lowercase() byte-wise, then ID) built when a vault is created or unlocked (one decryption pass) and kept next to the parsed file; every mutating operation (add, update, delete, import, change_master_password, rotate_vault_key, change_master_password_and_rotate_key) builds the new index together with the new file image and replaces both only after the atomic write succeeded, so a failed write leaves the index unchanged (REQ-LIF-012). `ItemIndex::search` applies the REQ-LIF-009 rule to the stored summaries without decrypting anything. ItemIndex implements Debug as a fixed redacted string and zeroizes every string it owns in Drop; Vault's existing zeroize-on-lock behaviour covers it. Under the existing `test-hooks` feature expose `Vault::decrypt_count()` (a counter of record decryptions) so a test can prove that `index().search` and `index().entries()` decrypt nothing. Existing public behaviour, the file format and every pilot test are unchanged. Add the new names to the crate root re-exports.",
+      "depends_on": [
+        "F014-vault-rekey",
+        "F018-export-import"
+      ],
+      "acceptance": [
+        "After a seeded pseudo-random sequence of 200 operations (add, update, delete, import of an export, change_master_password, rotate_vault_key, change_master_password_and_rotate_key, lock/unlock) `index().entries()` equals `list()` and, for a set of queries including empty, mixed case, a URL fragment and non-ASCII (`İ`, `Σ`), `index().search(q)` equals `search(q)` (same items, same order) after every step",
+        "A freshly unlocked vault has `index().entries() == list()`; an empty vault has an empty index",
+        "A mutation that fails (invalid item, NotFound, injected I/O failure through the existing storage failure hook, LimitExceeded) leaves `index()` equal to its value before the call",
+        "With the test-hooks feature, `Vault::decrypt_count()` does not change across `index().search(..)` and `index().entries()`",
+        "ItemIndex implements Debug as a fixed string that contains none of a sentinel title placed in the vault; a compile-time/test assertion shows the type zeroizes on drop (Drop impl clears its strings) and no summary contains password, notes, TOTP or field values",
+        "All pilot tests (core and CLI) pass unchanged; no file format byte changes (existing layout and vector tests pass)",
+        "bash /src/pipeline/gate.sh prints GATE PASSED"
+      ],
+      "spec_refs": [
+        "architecture.md#71-core-additions-own-features-before-the-gui-uses-them",
+        "crypto-spec.md#5-vault-file-layout-format-version-1"
+      ],
+      "requirements": [
+        "REQ-IDX-001",
+        "REQ-IDX-002",
+        "REQ-IDX-003",
+        "REQ-LIF-012",
+        "REQ-SEC-002"
+      ]
+    },
+    {
+      "id": "F026-core-keyfile",
+      "title": "Core: secret-key files and guided vault creation",
+      "description": "In crates/onlypassword-core add `pub mod keyfile` with `read(path) -> Result<SecretKey>` and `write_new(path, &SecretKey) -> Result<()>` and `Vault::create_with_key_file` exactly as architecture.md 7.1. `read` opens the file, reads at most 4 097 bytes through a bounded reader into a Zeroizing buffer (more than 4 096 bytes: InvalidInput without reading the rest), requires UTF-8, trims ASCII whitespace at both ends and calls SecretKey::from_text (dashes and spaces inside are accepted as the core already does); I/O errors are Io(kind). `write_new` uses OpenOptions::create_new with mode 0600 on Unix (cfg(unix); other platforms use create_new alone), writes the key text plus a newline, calls sync_all, and removes the file again if writing or syncing fails; an existing file or symlink at the path is Io(AlreadyExists) and untouched. `create_with_key_file` implements the init order of architecture.md 5 steps 2-7 (paths must differ and neither exist; generate the key; write_new; read it back through `read` and check that it is the generated key with a constant-time comparison helper in the keyfile module (REQ-SEC-009 forbids `==` on secret bytes); remove the key file on any later failure; then Vault::create_with_key) and returns the unlocked Vault. Password length rules and KDF bounds are enforced by the existing create_with_key and surface unchanged (a too-short password must not leave a key file behind: check the password before step 4). The CLI keeps its own private keyfile module and is not touched. Re-export `keyfile` and the new function through the crate root as needed.",
+      "depends_on": [
+        "F012-vault-open"
+      ],
+      "acceptance": [
+        "keyfile::read accepts the canonical text with a trailing newline, surrounding spaces/tabs/CRLF and inner dashes, and returns InvalidInput for wrong prefix, wrong length, bad character, non-zero trailing bits, an empty file and a 4 097-byte file (without reading it fully: test with a sparse or in-memory-limited reader seam), and Io for a missing file",
+        "keyfile::write_new creates a file whose content round-trips through keyfile::read to the same key; on Unix its mode is 0600 (test through std::os::unix::fs::PermissionsExt under cfg(unix))",
+        "keyfile::write_new on an existing file leaves its bytes unchanged and returns Io(AlreadyExists); on a dangling symlink and on a symlink to an existing file it also fails and creates no target; on a missing directory it fails with Io and creates nothing",
+        "create_with_key_file: success returns an unlocked vault, and a second unlock with keyfile::read(key_path) and the password works; the vault and the key file both exist",
+        "create_with_key_file: key file path already exists, vault path already exists, both paths equal, key directory missing, vault directory unwritable (injected failure at vault creation), and a too-short password each return an error, leave no new file behind and never modify an existing file",
+        "A failure injected after the key file was written (vault directory made unwritable) removes the key file again",
+        "No error value or Debug output of the new functions contains the key text or a path (sentinel test)",
+        "All pilot tests pass unchanged; bash /src/pipeline/gate.sh prints GATE PASSED"
+      ],
+      "spec_refs": [
+        "architecture.md#71-core-additions-own-features-before-the-gui-uses-them",
+        "architecture.md#init-order-no-lost-key"
+      ],
+      "requirements": [
+        "REQ-KFL-001",
+        "REQ-KFL-002",
+        "REQ-KFL-003",
+        "REQ-SEC-003",
+        "REQ-FMT-008"
+      ]
+    },
+    {
+      "id": "F027-desktop-config",
+      "title": "Desktop: config module",
+      "description": "In crates/onlypassword-desktop implement `error` (the full `UiError` of architecture.md 7.6, with Display strings and From<onlypassword_core::Error>; the Core variant's Display is the core's own fixed text) and `config` (architecture.md 7.5): Theme, Config with defaults (300, 30, System, None), Config::validate (idle 10..=86400, clipboard 5..=600), ConfigStore::new(dir), ConfigStore::platform_default() using directories::ProjectDirs::from(\"\", \"\", \"onlypassword\") (returns None if the OS has no home), load() -> (Config, Option<UiError>) and save(&Config) -> Result<(), UiError>. Add the approved dependencies this needs (directories, serde with derive, serde_json, zeroize if used, tempfile as a dev-dependency). Serialization is a private mirror struct with `#[serde(deny_unknown_fields)]` and a version field of 1; paths are stored with to_str. Loading reads at most 4 097 bytes. Saving writes config.json.tmp in the same directory (mode 0600 on Unix), sync_all, renames over config.json, and removes the temporary file if any step fails. The module never panics on any file content and never touches any path other than <dir>/config.json and its temporary file.",
+      "depends_on": [
+        "F024-desktop-skeleton"
+      ],
+      "acceptance": [
+        "Missing file: defaults and no notice; save then load round-trips every field including last_vault_path Some and None and each Theme",
+        "Each of these files yields the defaults plus UiError::ConfigInvalid and is not rewritten by load: empty file, invalid UTF-8, malformed JSON, wrong types, an unknown key, version 2, idle_timeout_secs 9 and 86401, clipboard_clear_secs 4 and 601, a 5 000-byte file, a directory in place of the file",
+        "The set of keys in the saved JSON is exactly version, idle_timeout_secs, clipboard_clear_secs, theme, last_vault_path (test parses the written file)",
+        "save rejects out-of-range values with UiError::InvalidSetting before touching the disk; on a read-only directory it returns UiError::ConfigWrite and leaves an existing config.json byte-identical and no temporary file behind",
+        "On Unix the saved file has mode 0600 (cfg(unix) test)",
+        "ConfigStore::platform_default() compiles on all three targets and, with HOME/XDG variables not consulted by the test, is not used by any test that writes (tests use tempfile directories only)",
+        "Every UiError variant has a Display that is a fixed literal; a test lists them and asserts none contains a sentinel path or value; the Core variant shows the same text as the core's Error",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "architecture.md#75-config-module",
+        "architecture.md#76-error-surface",
+        "architecture.md#77-dependencies-and-portability-rules"
+      ],
+      "requirements": [
+        "REQ-CFG-001",
+        "REQ-CFG-002",
+        "REQ-CFG-003",
+        "REQ-CFG-004",
+        "REQ-GUI-073",
+        "REQ-GUI-072"
+      ]
+    },
+    {
+      "id": "F028-desktop-session",
+      "title": "Desktop: state machine, open, create, unlock and lock",
+      "description": "In crates/onlypassword-desktop implement `secret_buf` (SecretBuf), `clock` (UiClock, SystemUiClock, public ManualClock), `picker` (FilePicker trait, RfdPicker with the rfd dependency in the approved configuration, public ScriptedPicker) and the first version of `state`: AppDeps {clock, picker, config_store, kdf} (a later feature adds the clipboard field), AppState::new(deps) replacing the temporary default (Screen::Unlock when the config has a last_vault_path, else Screen::Open), Screen, Action, dispatch, tick, screen(), notice(), is_clean(), on_exit(), and Session holding Vault + SecretKey. Implement the flows: SubmitOpen (vault path, password SecretBuf, key-file path: keyfile::read then Vault::unlock; the password buffer is cleared after every attempt), SubmitCreate (vault path, new key-file path, password, confirmation: PasswordMismatch before any disk access, then Vault::create_with_key_file with deps.kdf; the key text is never shown), Lock (Vault::lock, drop Session, clear every buffer, Screen::Unlock showing nothing from the vault) and the config update of last_vault_path after a successful open/create (a save failure only sets notice). Unlock failures map through UiError::from: Authentication stays the single core message. AppState has no Clone and a redacted Debug. Add the views: open, create, unlock (path fields with Browse buttons that call the picker, password fields through view::secret_edit, an egui TextBuffer adapter over SecretBuf with .password(true)), and a Lock button on the browse placeholder screen. After submit, cancel or lock the view clears egui memory data. The browse screen at this stage is a placeholder `Unlocked` label with the Lock button.",
+      "depends_on": [
+        "F024-desktop-skeleton",
+        "F026-core-keyfile",
+        "F027-desktop-config"
+      ],
+      "acceptance": [
+        "State test: create a vault in a tempdir (KdfParams::FAST_FOR_TESTS via AppDeps) through Action::SubmitCreate; the vault file and a key file (mode 0600 on Unix) exist, Screen is not Open/Create/Unlock, last_vault_path in the config file equals the vault path and the config file contains no key-file path",
+        "State test: SubmitCreate with mismatching confirmation sets UiError::PasswordMismatch, creates no file and keeps the entered paths; with an existing key-file path it fails with the core's Io message and overwrites nothing",
+        "State test: after Lock, Screen is Unlock, is_clean() is true, `format!(\"{:?}\", state)` contains neither the password sentinel nor the key text, and a second Lock does nothing",
+        "State test: SubmitOpen with the correct password and key file unlocks; with a wrong password and with a wrong key file the notice is the same Authentication message and the screen stays Unlock; a missing key file, a malformed key file, a missing vault and a vault with a flipped byte give other fixed messages, never the Authentication one (except where the core returns it)",
+        "The password SecretBuf is empty after every submit (success or failure) and after Lock; SecretBuf is not Clone, its Debug is redacted, it zeroizes on drop (type-level assertion) and has capacity 1024 reserved at creation",
+        "kittest view test: on the unlock screen typing into the password field then clicking Unlock (ScriptedPicker supplies paths) reaches the unlocked state; the typed password text appears nowhere in the accessibility tree (masked) and the field is empty afterwards",
+        "ManualClock advances without sleeping; ScriptedPicker returns queued answers and None when empty (cancel is silent: PickerCancelled is never shown)",
+        "A randomised sequence of 500 Action values (seeded generator written in the test) never panics",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks (rfd and the picker module compile for the Windows and macOS targets)"
+      ],
+      "spec_refs": [
+        "architecture.md#72-layout",
+        "architecture.md#73-state-machine-and-secrets-in-the-ui",
+        "architecture.md#76-error-surface",
+        "requirements.md#gui--desktop-application"
+      ],
+      "requirements": [
+        "REQ-GUI-001",
+        "REQ-GUI-002",
+        "REQ-GUI-003",
+        "REQ-GUI-033",
+        "REQ-GUI-072",
+        "REQ-LOCK-001",
+        "REQ-LOCK-003",
+        "REQ-LOCK-004",
+        "REQ-CFG-005",
+        "REQ-GUI-075",
+        "REQ-SEC-002"
+      ]
+    },
+    {
+      "id": "F029-desktop-idle-settings",
+      "title": "Desktop: idle lock, settings screen and theme",
+      "description": "In crates/onlypassword-desktop add `state::idle` (IdleTimer {timeout, last_activity}: touch, expired, set_timeout; armed only while a Session exists) and `state::settings`. AppState::tick locks the session (same path as Action::Lock, before any other pending work) when the monotonic UiClock says the idle timeout has passed, on every screen including open dialogs and forms (a draft or maintenance form in progress is dropped); Action::Activity resets the timer; the timer value comes from the Config (default 300 s). Add Screen::Settings, Action::SaveSettings (idle timeout, clipboard timeout, theme), validation through Config::validate (UiError::InvalidSetting), save through ConfigStore (ConfigWrite on failure; the in-memory settings still apply), immediate effect on the running timer, and the view for settings (reachable from the unlock screen and from the unlocked screens). Theme applies through egui visuals each frame (System follows eframe's reported preference, light if none). DesktopApp::update dispatches Action::Activity when the frame's input has events or pointer movement, calls tick() every frame, and requests a repaint after at most one second while a session exists so the timer fires without input. A tick after a long gap (clock advanced past the timeout, as after a blocking dialog) locks before processing anything else.",
+      "depends_on": [
+        "F028-desktop-session"
+      ],
+      "acceptance": [
+        "ManualClock test: unlock; advance 299 s then Activity then 299 s: still unlocked; advance 301 s: tick locks, Screen::Unlock, is_clean()",
+        "With a non-empty password SecretBuf in a form and with the Settings screen open, idle expiry locks regardless and clears the buffers (draft and maintenance forms are covered by the F033 and F035 tests)",
+        "A single tick after advancing the clock by 10 000 s locks; Actions queued after the lock in the same call are not applied to a vault",
+        "Changing idle_timeout_secs to 60 through Action::SaveSettings takes effect on the running session without restart; value 9 and 86401 give UiError::InvalidSetting and change nothing; a read-only config directory gives ConfigWrite but the session still uses the new value",
+        "The saved config file after SaveSettings has exactly the five keys and the new values; no secret or key path",
+        "kittest view test: the settings screen shows the three settings, saving a valid change updates state and file, an invalid value shows the fixed message; theme choice sets egui visuals dark/light for the next frame (assert on ctx.style().visuals.dark_mode after a frame)",
+        "A source test shows DesktopApp calls request_repaint_after with a duration of at most one second only while a session exists (assert through a small pure function `repaint_after(&AppState) -> Option<Duration>` that the app uses)",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "architecture.md#73-state-machine-and-secrets-in-the-ui",
+        "architecture.md#75-config-module",
+        "requirements.md#gui--desktop-application"
+      ],
+      "requirements": [
+        "REQ-LOCK-002",
+        "REQ-LOCK-004",
+        "REQ-LOCK-005",
+        "REQ-LOCK-006",
+        "REQ-CFG-006",
+        "REQ-CFG-007",
+        "REQ-CFG-008",
+        "REQ-GUI-075"
+      ]
+    },
+    {
+      "id": "F030-desktop-browse",
+      "title": "Desktop: browse, search, detail and masked fields",
+      "description": "In crates/onlypassword-desktop extend Session with the rows copied from Vault::index() (Row: a plain struct holding kind, title, username and id that implements Zeroize and zeroizes on drop), the search text, the selected item and its StoredItem (Vault::get), and the reveal set BTreeSet<FieldRef> (FieldRef {Password, Notes, TotpSecret, Custom(usize)}). Actions: Search(String) (rows = index().search(text), empty = all entries), Select(ItemId), ToggleReveal(FieldRef), Back. Rows refresh from the index after any change to the vault. Views: browse (search box, list of rows, selected row opens the detail screen) and detail for logins (title, username, password, URLs, notes, TOTP secret, custom fields with names) and secure notes (title, notes). Masked fields (password, notes, TOTP secret, hidden custom fields) draw a fixed placeholder of eight bullets with Reveal toggle; revealed text is drawn from the held SecretString; no secret is formatted into a widget id, label or tooltip. Reveal is cleared on lock, on selection change and when leaving the detail. Lock drops the rows, search text, detail and reveal set (is_clean stays true after lock). Add a Copy button placeholder only if the clipboard feature already exists; otherwise a later feature adds it.",
+      "depends_on": [
+        "F025-core-index",
+        "F028-desktop-session"
+      ],
+      "acceptance": [
+        "State test: with five items (login with URLs, login with hidden custom field, note, non-ASCII titles) added through the core in the test setup, the browse rows equal Vault::list() order and carry only kind, title and username",
+        "Search(\"gith\"), a username fragment, a URL fragment, mixed case, non-ASCII `İ`/`Σ` and empty text each give exactly Vault::search(text) results; a query matching only a password, a note or a custom field value gives no rows",
+        "Select shows every field of a login including custom fields and hidden flags and of a note (state accessor test)",
+        "kittest view test: with a login selected the accessibility tree contains the title and username and the placeholder bullets, and contains none of the password, note, TOTP secret or hidden field sentinel; clicking Reveal on the password shows that sentinel and no other secret; clicking again hides it",
+        "Reveal state is empty after selecting another item, after Back and after Lock; after Lock is_clean() is true, no row or title appears in `format!(\"{:?}\", state)` and the accessibility tree of the unlock screen contains no item title",
+        "The placeholder is identical for passwords of length 1 and 200",
+        "Row implements zeroize-on-drop (type-level assertion) and Debug of Row/Session/StoredItem holders is redacted (sentinel test)",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "architecture.md#73-state-machine-and-secrets-in-the-ui",
+        "architecture.md#73-state-machine-and-secrets-in-the-ui"
+      ],
+      "requirements": [
+        "REQ-GUI-010",
+        "REQ-GUI-011",
+        "REQ-GUI-012",
+        "REQ-GUI-030",
+        "REQ-GUI-031",
+        "REQ-GUI-032",
+        "REQ-LOCK-003",
+        "REQ-GUI-072",
+        "REQ-GUI-075"
+      ]
+    },
+    {
+      "id": "F031-desktop-clipboard",
+      "title": "Desktop: clipboard service with timed clear",
+      "description": "In crates/onlypassword-desktop implement `clipboard` (architecture.md 7.4): trait ClipboardBackend, ArboardBackend (arboard in the approved configuration; extension traits for excluding history behind cfg(windows) / cfg(target_os = \"macos\") / cfg(all(unix, not(target_os = \"macos\"))) only where the chosen arboard version offers them, otherwise plain text set), public MemoryClipboard (shared handle for tests: current text, `sensitive` flag of the last set, switchable failure), and ClipboardService with copy, poll, clear_now, SHA-256 digest of the copied text (sha2) and the deadline from UiClock. Add the `clipboard` field to AppDeps (updating every constructor and test), Action::Copy(FieldRef) in the detail view (loads the text from the held StoredItem, calls the service, then drops it), the Copy buttons next to each field, tick() polling the service, clear on Lock and on_exit, and run-time update of the timeout from the Config (a pending deadline is not moved). A backend failure is UiError::Clipboard, creates no pending clear and leaves the app usable. The service reads the clipboard only to compare at the deadline or at clear_now.",
+      "depends_on": [
+        "F030-desktop-browse",
+        "F029-desktop-idle-settings"
+      ],
+      "acceptance": [
+        "MemoryClipboard test: copy a password sentinel; the backend holds it with the sensitive flag set; advance ManualClock 29 s: still there; 30 s: cleared (empty or None) and the pending value forgotten",
+        "If the clipboard text was replaced by something else before the deadline, the service leaves it untouched and forgets the pending clear; a second copy restarts the countdown and only the second value is tracked",
+        "Lock clears the clipboard immediately when it still holds the copied value, leaves it alone when it does not; on_exit does the same; after both, is_clean() is true (no pending digest)",
+        "A timeout of 120 s saved in settings applies to the next copy; changing it while a copy is pending does not change that copy's deadline (REQ-CFG-008)",
+        "A failing backend gives notice UiError::Clipboard (fixed message without the value), no pending clear, and the next copy works after the backend recovers",
+        "The service reads the clipboard exactly as many times as expected by the test's MemoryClipboard counters (zero reads until a deadline or clear_now), and the copied text never appears in `format!(\"{:?}\", service)` or in any UiError string",
+        "ClipboardService has no field of type String/Vec<u8> holding the text (digest [u8; 32] only; checked by a destructuring test or by Debug redaction test)",
+        "kittest view test: clicking Copy on the password in the detail view puts the sentinel on the MemoryClipboard; the tree never contains it",
+        "The arboard-using code compiles with `cargo check` for x86_64-pc-windows-msvc and aarch64-apple-darwin (gate); no test touches the real system clipboard",
+        "bash /src/pipeline/gate.sh prints GATE PASSED"
+      ],
+      "spec_refs": [
+        "architecture.md#74-clipboard-service",
+        "architecture.md#77-dependencies-and-portability-rules",
+        "threat-model.md#7-desktop-threats"
+      ],
+      "requirements": [
+        "REQ-CLIP-001",
+        "REQ-CLIP-002",
+        "REQ-CLIP-003",
+        "REQ-CLIP-004",
+        "REQ-CLIP-005",
+        "REQ-CLIP-006",
+        "REQ-CFG-008",
+        "REQ-GUI-074",
+        "REQ-GUI-075"
+      ]
+    },
+    {
+      "id": "F032-desktop-totp",
+      "title": "Desktop: TOTP code with countdown",
+      "description": "In crates/onlypassword-desktop show, in the detail view of a login with a TOTP configuration, the current code from onlypassword_core::totp_for_item(cfg, unix_secs) with unix_secs from UiClock, and the whole seconds remaining (period - unix_secs % period, between 1 and period) with a progress bar. The code and remaining seconds are computed by a pure function in `state` (no egui) from the held StoredItem and the clock, recomputed on each tick, so the code changes at the period boundary without user input; DesktopApp requests repaints at most one second apart while such an item is displayed. Invalid stored parameters give the core's fixed message in place of the code and no panic. Items without TOTP show nothing; the code, remaining seconds and cached text are dropped when the item is left or the app locks. The TOTP secret itself stays masked/revealed like any secret (F030); a Copy button for the code uses the clipboard service as for other fields.",
+      "depends_on": [
+        "F030-desktop-browse",
+        "F031-desktop-clipboard"
+      ],
+      "acceptance": [
+        "Using ManualClock::set_unix and the RFC 6238 SHA-1 test secret loaded from spec/vectors/totp.json (never copied into source), the displayed code at unix times 59, 1111111109 and 20000000000 equals the vector values for 8 digits, and the remaining seconds are 1, 21 and 10 respectively for a 30 s period",
+        "Advancing the clock across a period boundary and calling tick changes the code and resets remaining to the period without any other action; remaining is always in 1..=period for periods 1, 30, 300 over a range of times",
+        "A login whose stored TOTP has digits outside 6..=8 (built through the core test setup or an imported item) shows the core's fixed InvalidInput message, no code, no panic",
+        "An item without TOTP shows no TOTP section; after selecting another item or locking, the TOTP display state is empty and is_clean() holds",
+        "kittest view test: the tree contains the code text and a countdown label for a TOTP login; it does not contain the base32 secret while masked",
+        "Copy of the TOTP code uses the clipboard service (MemoryClipboard holds the code, with the sensitive flag) and is cleared after the timeout",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "architecture.md#73-state-machine-and-secrets-in-the-ui",
+        "crypto-spec.md#7-item-plaintext-schema-1"
+      ],
+      "requirements": [
+        "REQ-GUI-040",
+        "REQ-GUI-041",
+        "REQ-TOT-004",
+        "REQ-GUI-075"
+      ]
+    },
+    {
+      "id": "F033-desktop-edit",
+      "title": "Desktop: add, edit and delete items",
+      "description": "In crates/onlypassword-desktop implement `state::edit`: Draft (kind, title, username, URL list as plain Strings; password, notes, TOTP secret and hidden custom-field values in SecretBuf; TOTP algorithm, digits, period; custom fields with name, value, hidden flag), Actions BeginAdd(ItemKind), BeginEdit (loads the selected StoredItem into a Draft), edit setters for every field, AddUrl/RemoveUrl, AddField/RemoveField, SaveDraft, CancelDraft, RequestDelete, ConfirmDelete, CancelDelete. SaveDraft builds an onlypassword_core::Item (TOTP secret through normalize_totp_secret, empty optional fields become None), calls Vault::add or Vault::update, refreshes the rows, and returns to the detail of that item; a core error keeps the draft and sets the notice (REQ-LIF-012). Notes drafts expose and submit only title and notes. Delete shows a confirmation naming the title only and calls Vault::delete after ConfirmDelete only. Views: the edit form with every field (secret fields through view::secret_edit, masked unless revealed per field), Add Login / Add Note buttons on the browse screen, Edit and Delete buttons on the detail. Cancel, navigation, selection change and lock drop the Draft (zeroized) and clear egui memory data.",
+      "depends_on": [
+        "F030-desktop-browse"
+      ],
+      "acceptance": [
+        "State test: add a login with every field (title, username, password, two URLs, notes, TOTP secret in lower-case with spaces plus SHA-256/8 digits/60 s, one plain and one hidden custom field) and read it back through Vault::get: all fields equal, TOTP secret canonical upper-case base32, revision 1; the browse list shows it",
+        "State test: edit it (change title, password, remove one URL, clear TOTP) and save: revision 2, created_ms unchanged, changes present; the old values are gone from Vault::get",
+        "State test: add a secure note with title and notes; a note draft rejects/does not offer username, password, URLs, TOTP; saving a note built from a login draft that had values typed in the login fields (switch kind) does not submit them",
+        "State test: an invalid draft (empty title or over-limit field, bad TOTP secret `!!!`, 129-byte TOTP secret) sets the core's fixed message, keeps the Draft with its content and leaves the vault file byte-identical",
+        "State test: delete requires RequestDelete then ConfirmDelete; CancelDelete, Select of another item and Lock leave the item present; after ConfirmDelete Vault::get returns NotFound and the row is gone",
+        "State test: idle expiry (ManualClock past the timeout, then tick) with a Draft open locks the vault and discards the Draft",
+        "State test: CancelDraft, navigation away and Lock drop the Draft; is_clean() holds after Lock; `format!(\"{:?}\", state)` never contains the draft's secret sentinels",
+        "kittest view test: typing a password into the edit form's password field (masked) stores it in the draft's SecretBuf, the accessibility tree never contains the typed text, Save adds the item; the reveal toggle shows it for that field only",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "architecture.md#73-state-machine-and-secrets-in-the-ui",
+        "requirements.md#gui--desktop-application",
+        "crypto-spec.md#7-item-plaintext-schema-1"
+      ],
+      "requirements": [
+        "REQ-GUI-020",
+        "REQ-GUI-021",
+        "REQ-GUI-022",
+        "REQ-GUI-023",
+        "REQ-GUI-033",
+        "REQ-GUI-030",
+        "REQ-ITM-007",
+        "REQ-GUI-075",
+        "REQ-LOCK-004"
+      ]
+    },
+    {
+      "id": "F034-desktop-generator",
+      "title": "Desktop: password and passphrase generator panel",
+      "description": "In crates/onlypassword-desktop implement `state::generator`: GeneratorState with the options of onlypassword_core::PasswordOptions and PassphraseOptions (defaults from the core's Default impls), mode (Password or Passphrase), the current generated value as Option<SecretString>, Actions SetPasswordOptions, SetPassphraseOptions, GenerateNow, UseGenerated, CopyGenerated, DiscardGenerated. GenerateNow calls generate_password / generate_passphrase only; invalid options show the core's fixed InvalidInput message and keep no value. UseGenerated places the value in the open Draft's password field (replacing it, through the SecretBuf) and drops the generator's copy; with no Draft open it is rejected with UiError::NoSelection. CopyGenerated uses the clipboard service. The generated value is dropped on discard, on use, when the panel closes and on lock. Views: a generator panel (a side panel in the edit screen and a standalone Screen::Generator from the browse screen) with all options; the generated value is shown masked with a Reveal toggle, like any secret.",
+      "depends_on": [
+        "F033-desktop-edit"
+      ],
+      "acceptance": [
+        "State test: with defaults GenerateNow gives a 20-character password containing all four classes; options length 4 and 256, exclude_ambiguous, each class off, passphrase with 4 and 24 words, separator `.`, capitalize and digit all produce values accepted by the matching core validation (assert via re-running the core generator's own checks, e.g. character-class membership); invalid options (length 3, no class, 25 words, 9-character separator) give the core's InvalidInput message and no value",
+        "State test: UseGenerated with a Draft open sets the draft's password to the generated value (compare through expose in the test only) and the generator no longer holds a value; saving the draft stores that password",
+        "State test: UseGenerated with no Draft open leaves state unchanged and shows UiError::NoSelection; the value is dropped by DiscardGenerated and by Lock; is_clean() holds after Lock",
+        "State test: CopyGenerated puts the value on the MemoryClipboard and starts the timed clear",
+        "kittest view test: the generated value is masked in the tree until Reveal is clicked; the 'use this' button changes the edit form's password field state",
+        "The desktop crate calls no random source of its own (source scan: no getrandom, rand, or std::time-seeded generation in crates/onlypassword-desktop/src)",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "architecture.md#73-state-machine-and-secrets-in-the-ui",
+        "requirements.md#gui--desktop-application"
+      ],
+      "requirements": [
+        "REQ-GUI-050",
+        "REQ-GUI-051",
+        "REQ-GEN-004",
+        "REQ-GUI-075"
+      ]
+    },
+    {
+      "id": "F035-desktop-maintenance",
+      "title": "Desktop: change password, rotate key, export and import",
+      "description": "In crates/onlypassword-desktop implement `state::maintenance` with MaintenanceKind {ChangePassword, RotateKey, Export, Import} and Actions SubmitChangePassword, SubmitRotate, SubmitExport, SubmitImport, CancelMaintenance. ChangePassword: current, new, confirm (SecretBuf) and a rotate checkbox (default on) -> change_master_password_and_rotate_key or change_master_password (mismatch = UiError::PasswordMismatch without calling the core; the Session's SecretKey and deps.kdf are passed). RotateKey: explicit confirmation then rotate_vault_key. Export: target path from FilePicker::save_export, export password and confirmation, Vault::export with the session's own SecretKey and deps.kdf; a target equal to the vault shows the core's InvalidInput. Import: export file from FilePicker::pick_export, export password, and the source secret-key file from FilePicker::pick_key_file read through keyfile::read, then Vault::import; the success notice reports the number of items; Authentication, Corrupt, UnsupportedVersion and Conflict show the core's fixed messages and change nothing. Paths are passed to the core unmodified (no canonicalize). All password buffers are zeroized after the call and on cancel/lock; rows refresh from the index after import, change and rotate. Add the views (a Maintenance menu on the browse screen, one form per kind).",
+      "depends_on": [
+        "F030-desktop-browse",
+        "F026-core-keyfile"
+      ],
+      "acceptance": [
+        "State test: ChangePassword with the correct current password (rotate on) succeeds; afterwards Lock and unlock with the old password gives Authentication and with the new password works; every item reads back unchanged; with rotate off the vault key is not rotated (file bytes of item records unchanged, as REQ-LIF-010) and the notice mentions nothing secret",
+        "State test: wrong current password gives the Authentication message and changes the file not at all; a new password of 7 characters gives the core's InvalidInput message; mismatching confirmation gives PasswordMismatch with the file untouched",
+        "State test: RotateKey needs the confirm action; afterwards all items read back equal and the record ciphertexts differ from before",
+        "State test: Export to a tempdir path then Import into a fresh vault created by the app (second AppState or second session) with the first vault's key file: list and every get equal; import with the second vault's own key file gives Authentication; a wrong export password gives Authentication; a byte-flipped export file gives a fixed core error; importing the same export twice gives Conflict and the item count stays the same",
+        "State test: Export with the target equal to the vault path (also through a symlink created in the tempdir, cfg(unix)) shows the core's InvalidInput and leaves the vault byte-identical",
+        "After every maintenance action (success or failure) and after Lock, the password SecretBufs are empty and is_clean() holds after Lock; no messages or Debug output contain the passwords",
+        "State test: idle expiry with a maintenance form holding typed passwords locks the vault and empties the buffers",
+        "A failed maintenance action leaves Session usable and the vault unchanged (REQ-LIF-012)",
+        "kittest view test: the change-password form shows three masked fields; filling them (ScriptedPicker for paths on export/import) and submitting drives the flow; typed text is not in the tree",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "architecture.md#73-state-machine-and-secrets-in-the-ui",
+        "requirements.md#gui--desktop-application",
+        "architecture.md#5-cli-onlypassword"
+      ],
+      "requirements": [
+        "REQ-GUI-060",
+        "REQ-GUI-061",
+        "REQ-GUI-062",
+        "REQ-GUI-063",
+        "REQ-GUI-064",
+        "REQ-LIF-010",
+        "REQ-EXP-007",
+        "REQ-GUI-075",
+        "REQ-LOCK-004"
+      ]
+    },
+    {
+      "id": "F036-desktop-hardening",
+      "title": "Desktop: non-negotiable checks and robustness",
+      "description": "In crates/onlypassword-desktop/tests add the cross-cutting suites of architecture.md 7.8 and fix whatever they find in the earlier desktop features (without weakening any test): (1) source scans over crates/onlypassword-desktop/src: no println!/eprintln!/print!/eprint!/dbg!/log::/tracing:: and no std::net or ToSocketAddrs; `egui`/`eframe` named only in src/view, src/app.rs and src/main.rs; no `unwrap`/`expect`/`panic!`/indexing outside cfg(test) beyond what the crate-root clippy lints already enforce; (2) a Cargo.lock denylist test of the network crates listed in architecture.md 7.8 and a check that no [dependencies] section of the desktop Cargo.toml mentions insecure-fast-kdf or test-hooks; (3) a sentinel test: run a long scripted session (open, browse, reveal, copy, edit, generate, export, import, change password, lock) with sentinel secret values and assert that no sentinel appears in `format!(\"{:?}\")` of AppState, in any notice or UiError string, in the config file, or in the MemoryClipboard after the clear, and that is_clean() holds after Lock; (4) a seeded randomised sequence of 2 000 Action values over all screens (valid and invalid, in any order, with random clock advances) that must never panic and must end with is_clean() after a Lock; (5) every UiError and core Error Display string is from a fixed list. If a required fix needs a core change, add it as a note in agent-notes/spec-issues.md and take the closest safe reading rather than changing the core in this feature.",
+      "depends_on": [
+        "F029-desktop-idle-settings",
+        "F031-desktop-clipboard",
+        "F032-desktop-totp",
+        "F034-desktop-generator",
+        "F035-desktop-maintenance"
+      ],
+      "acceptance": [
+        "The source-scan test fails when a forbidden macro or std::net use is planted in a temporary copy of a source file (test the scanner on a synthetic input string), and passes on the real tree",
+        "The Cargo.lock denylist test passes on the real lock file and fails on a synthetic lock text containing `name = \"reqwest\"`",
+        "The long scripted sentinel session passes all its assertions, including that no sentinel appears anywhere listed in the description after Lock",
+        "The randomised action test runs 2 000 actions with at least three different seeds and never panics; after a final Lock is_clean() is true",
+        "The test listing Display strings of every UiError variant and core Error variant asserts each is non-empty, contains no `{`, no path separator and none of the sentinels",
+        "Only crates/onlypassword-desktop (and agent-notes) change in this feature; the pilot tests pass unchanged",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "architecture.md#78-test-strategy-desktop",
+        "threat-model.md#7-desktop-threats",
+        "architecture.md#77-dependencies-and-portability-rules"
+      ],
+      "requirements": [
+        "REQ-GUI-070",
+        "REQ-GUI-071",
+        "REQ-GUI-072",
+        "REQ-GUI-073",
+        "REQ-GUI-074",
+        "REQ-GUI-075",
+        "REQ-GUI-076",
+        "REQ-LOCK-003",
+        "REQ-SEC-004"
+      ]
+    },
+    {
+      "id": "F037-desktop-e2e",
+      "title": "End-to-end desktop test (phase 2 definition of done)",
+      "description": "Add crates/onlypassword-desktop/tests/e2e.rs, a single headless scenario that drives AppState (and, for the lock/unlock and one edit step, the egui_kittest views) with ManualClock, MemoryClipboard, ScriptedPicker, a tempfile config directory and the real default KDF parameters (AppDeps::kdf = KdfParams::DEFAULT; the dev-dependency core features are not used for this test's parameters): create a vault with a new key file; add a login with a TOTP secret (SHA-1, 8 digits) and custom fields (one plain, one hidden) and a secure note; lock (manually) and check is_clean(); unlock again; read both items back through the detail view state and compare every field with what was added, including the TOTP code at a fixed ManualClock time against the vector in spec/vectors/totp.json and the clipboard copy and timed clear of the password; also lock through the idle timeout once; change the master password (rotate on) and confirm that the old password fails with the generic Authentication message and the new one unlocks; export; create a fresh vault with another key file; import the export with the first vault's key file; verify the fresh vault's list and every item equal the first's; finally lock and assert that no plaintext remains in the application state (is_clean(), a sentinel scan of the Debug output and of the config file, the MemoryClipboard empty). Use obviously fake values (e.g. 'correct-horse-test-only') only.",
+      "depends_on": [
+        "F036-desktop-hardening"
+      ],
+      "acceptance": [
+        "The scenario test passes under the gate in bounded time (default Argon2 parameters, about ten derivations) and without a display",
+        "Every step of the phase-2 definition of done appears in the test in order: create vault, add items (login with TOTP and custom fields, note), lock, unlock, read back, change master password, export, import into a fresh vault, no plaintext after lock",
+        "After the final lock `AppState::is_clean()` is true, the Debug output of the state, the config file text and every captured notice contain none of the master, new and export passwords, the key text, the item passwords, notes, TOTP secret or hidden field values, and the MemoryClipboard is empty",
+        "The old master password fails with the generic Authentication message after the change; importing with the second vault's own key file fails with the same message",
+        "The idle-timeout lock is exercised once by advancing ManualClock past the configured timeout, with no sleeping",
+        "Test data uses obviously fake values and no real data (REQ-BLD-003); no test opens a window or touches the real clipboard or the real config directory",
+        "bash /src/pipeline/gate.sh prints GATE PASSED including the cross-target checks"
+      ],
+      "spec_refs": [
+        "brief.md",
+        "architecture.md#78-test-strategy-desktop"
+      ],
+      "requirements": [
+        "REQ-GUI-077",
+        "REQ-GUI-001",
+        "REQ-GUI-002",
+        "REQ-GUI-003",
+        "REQ-LOCK-001",
+        "REQ-LOCK-002",
+        "REQ-LOCK-003",
+        "REQ-GUI-040",
+        "REQ-CLIP-002",
+        "REQ-GUI-060",
+        "REQ-GUI-062",
+        "REQ-GUI-063",
+        "REQ-BLD-001",
+        "REQ-BLD-003"
+      ]
     }
   ]
 }

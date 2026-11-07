@@ -124,3 +124,110 @@ requirement is testable; `features.json` maps each one to a feature that tests i
 - **REQ-BLD-001** The workspace shall pass `bash pipeline/gate.sh` with only the dependencies in `spec/approved-deps.txt`.
 - **REQ-BLD-002** Known-answer tests shall load their vectors from `spec/vectors/*.json` at test time and shall not copy vector values into source files.
 - **REQ-BLD-003** Tests shall not be deleted, weakened or ignored, and no real passwords, keys or personal data shall appear in the repository.
+
+---
+
+# Phase 2 — desktop application
+
+"The desktop app" means the crate `onlypassword-desktop` (library `onlypassword_desktop`, binary
+`onlypassword-desktop`); see architecture.md §7. Phase 2 adds requirements only; every REQ above
+still holds, and the pilot's CLI is unchanged. "Headlessly" means: in a test that runs under
+`cargo test` with no display, either against the state machine (`AppState::dispatch`/`tick`) or
+through `egui_kittest` driving the views over the same state. A "fixed message" is a string
+literal of the core's `Error` `Display` or of `UiError` (architecture.md §7.6); it never contains
+a field value, a path or a key.
+
+## IDX — core: item index for list views (phase-2 core addition)
+
+- **REQ-IDX-001** The core shall provide `Vault::index()` returning an `ItemIndex` that holds the `ItemSummary` of every item, sorted exactly as `list()` (REQ-LIF-008), and `ItemIndex::search(query)` shall return exactly the summaries `Vault::search(query)` returns (REQ-LIF-009), in the same order, without decrypting any record.
+- **REQ-IDX-002** The index shall be built when a vault is created or unlocked and shall be updated by `add`, `update`, `delete`, `import`, `change_master_password`, `rotate_vault_key` and `change_master_password_and_rotate_key`; after any sequence of operations `index().entries()` shall equal `list()`, and after a failed mutation the index shall be unchanged (REQ-LIF-012).
+- **REQ-IDX-003** The index shall hold no password, notes, TOTP secret or custom-field value, shall implement `Debug` as a fixed redacted string, and shall zeroize its strings when the vault is locked or dropped (REQ-LIF-003).
+
+## KFL — core: secret-key files and guided creation (phase-2 core addition)
+
+- **REQ-KFL-001** The core shall provide `keyfile::read(path)` that reads at most 4 096 bytes (a larger file is `InvalidInput`, never fully read), trims ASCII whitespace at both ends and parses with `SecretKey::from_text` exactly as architecture.md §5 describes for the CLI, returning `InvalidInput` for malformed text and `Io` for I/O failures, with the file content held only in zeroizing buffers.
+- **REQ-KFL-002** The core shall provide `keyfile::write_new(path, key)` that creates the file exclusively (an existing file or symlink at the path is `Io(AlreadyExists)` and left untouched), with permissions 0600 on Unix, writes the key text and a newline, calls `sync_all`, and removes the file again if any later step fails.
+- **REQ-KFL-003** The core shall provide `Vault::create_with_key_file(vault_path, key_path, password, params)` that follows the order of architecture.md §5 *init order* (paths differ, neither exists, generate key, `write_new`, read back and compare through `keyfile::read`, `create_with_key`, remove the key file if vault creation fails), so that no vault exists without a key file that opens it and no existing file is overwritten.
+
+## GUI — desktop application
+
+### Opening and creating (brief scope 1)
+
+- **REQ-GUI-001** When the user submits a vault path, a master password and a secret-key file path on the open screen, the app shall unlock the vault through `keyfile::read` and `Vault::unlock` and show the browse screen; the password buffer shall be emptied after every submission, successful or not.
+- **REQ-GUI-002** When the user submits a new vault path, a new secret-key file path, a password and its confirmation on the create screen, the app shall call `Vault::create_with_key_file` with the app's KDF parameters (default `KdfParams::DEFAULT`), so the key file is new, 0600 on Unix and never overwrites; a mismatched confirmation shall be reported (`UiError::PasswordMismatch`) without touching the disk; the secret key text shall not be displayed.
+- **REQ-GUI-003** When unlocking fails because the password or the secret key is wrong, the app shall show the single fixed message of `Error::Authentication`, identical for both causes, and shall stay on the unlock screen; an unreadable or malformed key file, a missing vault file and a corrupt vault shall show the core's other fixed messages and shall never be reported as "wrong password".
+
+### Lock state (brief scope 2)
+
+- **REQ-LOCK-001** When the user locks manually, the app shall lock the vault (`Vault::lock`), drop every key, plaintext, list row, draft and revealed value, and show only the unlock screen.
+- **REQ-LOCK-002** When no user activity (keyboard, pointer or touch event) has occurred for the configured idle timeout (default 300 s), the app shall lock exactly as in REQ-LOCK-001 on its next `tick`, whichever screen or dialog is showing; any activity resets the timer.
+- **REQ-LOCK-003** After a lock, `AppState::is_clean()` shall be true: no `Vault`, no `SecretKey`, no `SecretBuf` with content, no draft, no list rows or detail, no revealed-field set, no generated value, no pending clipboard value; and `format!("{:?}", state)` shall contain no value that was on screen before the lock.
+- **REQ-LOCK-004** Locking shall succeed regardless of the state of the clipboard service, of an open draft with unsaved changes (discarded without prompt, zeroized) or of an open dialog or maintenance form; a lock while already locked shall do nothing.
+- **REQ-LOCK-005** When the clock jumps or a blocking native file dialog returns after more than the idle timeout has elapsed since the last activity, the first `tick` afterwards shall lock the vault before any further action is processed.
+- **REQ-LOCK-006** The idle timer shall use a monotonic clock supplied through the `UiClock` trait so that tests can advance it without sleeping; the idle timeout shall be changeable at run time (REQ-CFG-008).
+
+### Browsing (brief scope 3)
+
+- **REQ-GUI-010** The browse screen shall list every item from `Vault::index()` in the core's order, each row showing kind, title and username only.
+- **REQ-GUI-011** When the search text changes, the list shall update immediately to `ItemIndex::search(text)` (title, username and URL, case-insensitive substring); an empty text shows all items; the search text itself is not a secret and is cleared on lock.
+- **REQ-GUI-012** Selecting a row shall show a detail view with every field of the item: for a login, title, username, password, URLs, notes, TOTP (REQ-GUI-040) and all custom fields with their names and hidden flags; for a secure note, title and notes. The detail data shall be loaded with `Vault::get`, held in the core's secret types, and dropped when another item is selected, the item is edited, or the app locks.
+
+### Editing (brief scope 4)
+
+- **REQ-GUI-020** The app shall add a login or a secure note, and edit an existing item, through a draft that offers every attribute of the core's `Item` (title, username, password, URLs, notes, TOTP secret with algorithm, digits and period, custom fields with a hidden flag); saving shall call `Vault::add` or `Vault::update`, then return to the detail view of that item.
+- **REQ-GUI-021** When the core rejects a draft (`InvalidInput`, `LimitExceeded`, `Io`, …) the app shall show the core's fixed message, keep the draft and leave the vault unchanged (REQ-LIF-012); the TOTP secret typed by the user shall be passed through `normalize_totp_secret` before saving, and a failure there shall be shown as the core's `InvalidInput` message.
+- **REQ-GUI-022** When the user chooses delete, the app shall ask for confirmation naming only the item's title, delete (`Vault::delete`) only after an explicit confirm action, and leave the item untouched on cancel, on lock or when the selection changes.
+- **REQ-GUI-023** When the user cancels an edit, or navigates away, the draft shall be dropped (zeroized) without saving; a note draft shall not offer, and shall not submit, login-only fields.
+
+### Secrets on screen and clipboard (brief scope 5)
+
+- **REQ-GUI-030** Passwords, notes, TOTP secrets and hidden custom-field values shall be masked by default in the detail view and in edit forms; the masked rendering shall consist of a fixed placeholder that does not reveal the value's length or content, and no accessibility label, widget text or `Debug` output of the rendered views shall contain the value.
+- **REQ-GUI-031** The user shall be able to reveal one field at a time on request (a per-field toggle); revealing one field shall not reveal any other.
+- **REQ-GUI-032** Revealed fields shall be re-masked when the app locks, when another item is selected, when the item is left for edit and when the user toggles the field again.
+- **REQ-GUI-033** Secret text in forms (master password, export password, secret fields of a draft) shall be edited in `SecretBuf` buffers that are cleared and zeroized when the form is submitted, cancelled or the app locks, and that are masked while edited unless the user reveals them.
+- **REQ-CLIP-001** When the user copies a field, the app shall place its text on the clipboard through the `ClipboardBackend`, marking it as sensitive where the platform supports it, and shall remember only a SHA-256 digest of the copied text and the time, never the text.
+- **REQ-CLIP-002** When the clipboard timeout (default 30 s) has elapsed since the copy and the clipboard still holds text whose digest equals the remembered digest, the service shall clear the clipboard; if the clipboard holds anything else, the service shall leave it untouched and forget the pending clear.
+- **REQ-CLIP-003** A second copy shall replace the pending digest and restart the timeout; the clipboard timeout shall be changeable at run time (REQ-CFG-008).
+- **REQ-CLIP-004** When the app locks or its window closes, the service shall perform the pending clear immediately under the same "still holds our value" rule and then drop the digest.
+- **REQ-CLIP-005** When the clipboard backend fails, the app shall show the fixed `UiError::Clipboard` message, hold no pending clear for a copy that did not happen, and remain usable; the copied value shall not appear in any message.
+- **REQ-CLIP-006** The service shall perform no clipboard read except for the comparison of REQ-CLIP-002/-004, and the copied text shall exist in the app only as the transient argument of the backend call.
+
+### TOTP (brief scope 6)
+
+- **REQ-GUI-040** For a login with a TOTP configuration the detail view shall show the current code computed by `totp_for_item` with the Unix time from `UiClock`, and the whole seconds remaining in the current period (`period − (t mod period)`, between 1 and `period`), and shall show the next code once the period rolls over, without user action.
+- **REQ-GUI-041** When the stored TOTP parameters are invalid, the view shall show the core's fixed message in place of the code and shall not panic; the code and countdown shall not be computed for items without TOTP and shall be dropped when the item is left or the app locks.
+
+### Generator (brief scope 7)
+
+- **REQ-GUI-050** The generator panel shall expose every option of `PasswordOptions` and `PassphraseOptions`, produce values only through `generate_password` / `generate_passphrase`, show the core's fixed `InvalidInput` message for invalid options, and keep the generated value in a `SecretString` that is dropped on discard, on use or on lock.
+- **REQ-GUI-051** When the user chooses "use this" while editing an item, the generated password shall be placed in the draft's password field (replacing it) and the panel's copy dropped; with no draft open the action shall be unavailable; the generated value can also be copied through the clipboard service.
+
+### Maintenance (brief scope 8)
+
+- **REQ-GUI-060** Change master password: the app shall ask for the current password, the new password and its confirmation (with a "also rotate the vault key" choice, on by default) and call `change_master_password_and_rotate_key` or `change_master_password`; a mismatching confirmation is `UiError::PasswordMismatch` without calling the core; a wrong current password is the single `Authentication` message; a new password under 8 scalar values is the core's `InvalidInput`; after success the old password shall no longer unlock (REQ-LIF-010) and the vault stays unlocked.
+- **REQ-GUI-061** Rotate vault key: the app shall ask for confirmation, call `rotate_vault_key`, and afterwards every item shall read back unchanged.
+- **REQ-GUI-062** Export: the app shall ask for a target path, an export password and its confirmation, and call `Vault::export` with the unlocked vault's own secret key; a target equal to the vault file shall produce the core's `InvalidInput` message and leave the vault untouched; the export password buffers shall be zeroized after the call.
+- **REQ-GUI-063** Import: the app shall ask for an export file, an export password and the secret-key file of the vault the export came from, call `Vault::import`, and report the number of imported items on success; an `Authentication` or `Corrupt` failure changes nothing, a `Conflict` is reported with its fixed message, and the item list shall reflect the vault after the call.
+- **REQ-GUI-064** Every path used in the maintenance screens shall be passed to the core exactly as chosen (no canonicalization or symlink resolution by the app; REQ-FMT-009 and REQ-EXP-007 apply), and key files read for import shall be read only through `keyfile::read`.
+
+### Settings (brief scope 9)
+
+- **REQ-CFG-001** The app shall store its settings in a file `config.json` in the operating system's per-user configuration directory for the application (`directories::ProjectDirs`, qualifier `""`, organization `""`, application `onlypassword`), created with permissions 0600 on Unix; the store takes the directory as an argument so tests use a temporary one.
+- **REQ-CFG-002** The config file shall be JSON with exactly the keys `version` (1), `idle_timeout_secs` (default 300), `clipboard_clear_secs` (default 30), `theme` (`"system"` default, `"light"`, `"dark"`) and `last_vault_path` (string or null); no other key shall be written, and no secret, key-file path, password, item data or vault content shall ever be written.
+- **REQ-CFG-003** On load, a missing file shall yield the defaults; a file that is unreadable, larger than 4 096 bytes, not valid UTF-8 or JSON, has an unknown key, a wrong type, `version` other than 1, `idle_timeout_secs` outside 10..=86 400 or `clipboard_clear_secs` outside 5..=600 shall yield the defaults and the fixed notice `UiError::ConfigInvalid`, shall not panic, and shall not rewrite the file until the user saves settings.
+- **REQ-CFG-004** Saving shall write atomically (temporary file in the same directory, `sync_all`, rename), reject out-of-range values with `UiError::InvalidSetting` before writing, and on failure leave the old file unchanged and report `UiError::ConfigWrite`; a failure to read or write the config shall never prevent the app from running.
+- **REQ-CFG-005** After a successful unlock or create, `last_vault_path` shall be set to the vault path and saved; the open and unlock screens shall prefill that path; no other path (in particular, never the key-file path) is stored.
+- **REQ-CFG-006** The theme setting shall select the egui visuals (light, dark, or the system's preference where eframe reports it, light when it does not) and shall apply to the next frame.
+- **REQ-CFG-007** The settings screen shall edit the idle timeout, the clipboard timeout and the theme, validate on save (REQ-CFG-004) and show the fixed message on invalid input; it is available on the unlock screen and when unlocked.
+- **REQ-CFG-008** When settings are saved, the idle timer and the clipboard service shall use the new values immediately, without restart (a pending clipboard clear keeps its original deadline).
+
+### Non-negotiables of the desktop app
+
+- **REQ-GUI-070** The desktop crate shall not log, print or format any field value, password, key or note: it shall contain no `println!`, `eprintln!`, `print!`, `dbg!`, `log::` or `tracing::` invocation, and every type holding secrets or plaintext shall implement `Debug` as a fixed redacted string (REQ-SEC-002 applies).
+- **REQ-GUI-071** The desktop app shall not use the network: it shall not use `std::net`, shall not depend on any HTTP, TLS, socket or telemetry crate (a test checks the desktop crate's sources and `Cargo.lock` against a denylist), and shall contain no update check, telemetry or crash reporting.
+- **REQ-GUI-072** The desktop app shall hold key material and plaintext only in the core's secret types and `SecretBuf` (REQ-GUI-033), shall not convert them to plain `String`/`Vec<u8>` except for the transient arguments of egui text editing and of the clipboard call, and shall never write them to the config file or any file other than through core functions.
+- **REQ-GUI-073** The desktop crate shall carry `#![forbid(unsafe_code)]` in its library and binary roots and the panic-free `cfg_attr` lints of architecture.md §1; messages shown to the user shall be exactly the core's fixed messages or the fixed `UiError` messages (architecture.md §7.6), and no message shall contain a path, a field value or a key.
+- **REQ-GUI-074** Platform-specific code shall be gated with `cfg(target_os = …)` / `cfg(unix)` / `cfg(windows)` so that the crate passes `cargo check --workspace --all-targets --all-features` for `x86_64-pc-windows-msvc` and `aarch64-apple-darwin` (gate step), and the Linux code path shall be covered by the headless tests; the desktop crate shall not enable the core's `insecure-fast-kdf` or `test-hooks` features outside `[dev-dependencies]`.
+- **REQ-GUI-075** Every screen's main flows shall have headless tests (no window, no display, no network, no real clock sleeping): the state machine through `dispatch`/`tick`, and the views through `egui_kittest`; `eframe::run_native` shall be called only from `main.rs`.
+- **REQ-GUI-076** The pilot's CLI and core behaviour shall be unchanged: the pilot tests (including `onlypassword-cli/tests/e2e.rs`) shall keep passing, and phase 2 shall add to the core only the APIs of REQ-IDX-* and REQ-KFL-*.
+- **REQ-GUI-077** The end-to-end scenario of F037 (create, add login with TOTP and custom fields and a note, lock, unlock, read back, change master password, export, import into a fresh vault, no plaintext after lock) shall run headlessly under the gate with the real default KDF parameters for the create and unlock steps it contains.
