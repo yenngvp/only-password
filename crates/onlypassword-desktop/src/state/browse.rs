@@ -86,6 +86,8 @@ pub(super) struct BrowseState {
     pub detail: Option<Detail>,
     pub reveal: BTreeSet<FieldRef>,
     pub totp: Option<TotpView>,
+    pub draft: Option<super::edit::Draft>,
+    pub pending_delete: bool,
 }
 
 impl fmt::Debug for BrowseState {
@@ -226,6 +228,7 @@ impl AppState {
                     return;
                 }
                 session.browse.reveal.clear();
+                session.browse.pending_delete = false;
                 match session.vault.get(&id) {
                     Ok(item) => {
                         session.browse.detail = Some(Detail(item));
@@ -264,6 +267,7 @@ impl AppState {
                     session.browse.detail = None;
                     session.browse.totp = None;
                     session.browse.reveal.clear();
+                    session.browse.pending_delete = false;
                     self.screen = Screen::Browse;
                 }
             }
