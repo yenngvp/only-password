@@ -10,6 +10,7 @@ pub enum UiError {
     PasswordMismatch,
     EmptyField,
     NoSelection,
+    ConfirmationRequired,
     Clipboard,
     ConfigInvalid,
     ConfigWrite,
@@ -25,6 +26,7 @@ impl fmt::Display for UiError {
             UiError::PasswordMismatch => "the passwords do not match",
             UiError::EmptyField => "a required field is empty",
             UiError::NoSelection => "nothing is selected",
+            UiError::ConfirmationRequired => "confirmation is required",
             UiError::Clipboard => "the clipboard is not available",
             UiError::ConfigInvalid => "the settings file is invalid; defaults are in use",
             UiError::ConfigWrite => "the settings could not be saved",
@@ -55,6 +57,7 @@ mod tests {
             (UiError::PasswordMismatch, "the passwords do not match"),
             (UiError::EmptyField, "a required field is empty"),
             (UiError::NoSelection, "nothing is selected"),
+            (UiError::ConfirmationRequired, "confirmation is required"),
             (UiError::Clipboard, "the clipboard is not available"),
             (
                 UiError::ConfigInvalid,
