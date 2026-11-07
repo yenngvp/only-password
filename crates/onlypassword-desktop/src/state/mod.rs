@@ -13,7 +13,9 @@ pub use edit::{Draft, DraftField};
 pub mod generator;
 pub use generator::{GeneratorMode, GeneratorState};
 pub mod idle;
+pub mod maintenance;
 pub use browse::{Detail, FieldRef, Row};
+pub use maintenance::{MaintenanceForm, MaintenanceKind};
 pub mod settings;
 pub mod totp;
 pub use totp::{totp_view, TotpView};
@@ -61,6 +63,7 @@ pub enum Screen {
     Settings,
     /// The standalone generator (from Browse).
     Generator,
+    Maintenance(MaintenanceKind),
 }
 
 /// User intents.
@@ -131,6 +134,13 @@ pub enum Action {
     DiscardGenerated,
     /// Show or hide the generated value.
     ToggleGeneratedReveal,
+    /// Open a maintenance form (from Browse).
+    ShowMaintenance(MaintenanceKind),
+    SubmitChangePassword,
+    SubmitRotate,
+    SubmitExport,
+    SubmitImport,
+    CancelMaintenance,
     /// User input happened: restart the idle timer.
     Activity,
 }
@@ -173,6 +183,8 @@ pub struct AppState {
     idle: IdleTimer,
     settings: SettingsForm,
     settings_return: Screen,
+    maint: MaintenanceForm,
+    info: Option<String>,
 }
 
 impl fmt::Debug for AppState {
@@ -226,6 +238,8 @@ impl AppState {
             clipboard,
             idle,
             settings,
+            maint: MaintenanceForm::default(),
+            info: None,
             settings_return: Screen::Unlock,
             deps,
             config,
@@ -253,6 +267,8 @@ impl AppState {
             && self.open.password.is_empty()
             && self.create.password.is_empty()
             && self.create.confirm.is_empty()
+            && self.maint.buffers_empty()
+            && self.info.is_none()
             && self.clipboard.is_clean()
             && matches!(
                 self.screen,
@@ -308,6 +324,7 @@ impl AppState {
         // A late action after a long gap must not be applied to the vault.
         self.check_idle();
         self.notice = None;
+        self.info = None;
         match action {
             Action::Activity => {
                 if self.session.is_some() {
@@ -360,7 +377,16 @@ impl AppState {
             | Action::CopyGenerated
             | Action::DiscardGenerated
             | Action::ToggleGeneratedReveal => self.generator_action(action),
+            Action::ShowMaintenance(_)
+            | Action::SubmitChangePassword
+            | Action::SubmitRotate
+            | Action::SubmitExport
+            | Action::SubmitImport
+            | Action::CancelMaintenance => self.maintenance_action(action),
             Action::ShowSettings => {
+                if matches!(self.screen, Screen::Maintenance(_)) {
+                    self.reset_maintenance();
+                }
                 if matches!(self.screen, Screen::Edit(_)) {
                     self.drop_draft();
                 }
@@ -447,7 +473,8 @@ impl AppState {
             | Screen::Detail(_)
             | Screen::Edit(_)
             | Screen::Settings
-            | Screen::Generator => {}
+            | Screen::Generator
+            | Screen::Maintenance(_) => {}
         }
     }
 
@@ -544,6 +571,8 @@ impl AppState {
         self.open.password.clear();
         self.open.key_path.clear();
         self.create = CreateForm::default();
+        self.maint.reset();
+        self.info = None;
         self.notice = None;
         self.settings = SettingsForm::from_config(&self.config);
         self.screen = Screen::Unlock;

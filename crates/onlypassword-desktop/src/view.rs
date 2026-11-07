@@ -2,7 +2,7 @@
 
 use crate::config::Theme;
 use crate::secret_buf::SecretBuf;
-use crate::state::{Action, AppState, FieldRef, GeneratorMode, Screen};
+use crate::state::{Action, AppState, FieldRef, GeneratorMode, MaintenanceKind, Screen};
 use onlypassword_core::{ItemKind, TotpAlgorithm};
 use onlypassword_core::{PassphraseOptions, PasswordOptions};
 
@@ -25,6 +25,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         if let Some(n) = state.notice() {
             ui.colored_label(ui.visuals().error_fg_color, n.to_string());
         }
+        if let Some(i) = state.info() {
+            ui.label(i.to_owned());
+        }
         let action = match state.screen() {
             Screen::Open => open(ui, state),
             Screen::Create => create(ui, state),
@@ -34,6 +37,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             Screen::Edit(_) => edit(ui, state),
             Screen::Settings => settings(ui, state),
             Screen::Generator => generator_panel(ui, state),
+            Screen::Maintenance(kind) => maintenance(ui, state, *kind),
         };
         if let Some(action) = action {
             state.dispatch(action);
@@ -236,6 +240,16 @@ pub fn browse(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
     }
     if ui.button("Generator").clicked() {
         action = Some(Action::ShowGenerator);
+    }
+    for (label, kind) in [
+        ("Change password", MaintenanceKind::ChangePassword),
+        ("Rotate key", MaintenanceKind::RotateKey),
+        ("Export", MaintenanceKind::Export),
+        ("Import", MaintenanceKind::Import),
+    ] {
+        if ui.button(label).clicked() {
+            action = Some(Action::ShowMaintenance(kind));
+        }
     }
     if ui.button("Settings").clicked() {
         action = Some(Action::ShowSettings);
@@ -745,3 +759,47 @@ pub fn generator_panel(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
 
 /// Selects one boolean option of `PasswordOptions`.
 type FlagPick = fn(&mut PasswordOptions) -> &mut bool;
+
+/// One maintenance form. Paths come from the file pickers on submit.
+pub fn maintenance(
+    ui: &mut egui::Ui,
+    state: &mut AppState,
+    kind: MaintenanceKind,
+) -> Option<Action> {
+    let form = state.maintenance_form_mut();
+    let (_title, submit, button) = match kind {
+        MaintenanceKind::ChangePassword => {
+            ui.label("Change master password");
+            secret_edit(ui, "Current password", &mut form.current);
+            secret_edit(ui, "New password", &mut form.new);
+            secret_edit(ui, "Confirm new password", &mut form.confirm);
+            ui.checkbox(&mut form.rotate, "Also rotate the vault key");
+            ("Change password", Action::SubmitChangePassword, "Change")
+        }
+        MaintenanceKind::RotateKey => {
+            ui.label("Rotate the vault key");
+            secret_edit(ui, "Current password", &mut form.current);
+            ui.checkbox(&mut form.confirmed, "I confirm the vault key rotation");
+            ("Rotate key", Action::SubmitRotate, "Rotate")
+        }
+        MaintenanceKind::Export => {
+            ui.label("Export (you will choose the target file)");
+            secret_edit(ui, "Export password", &mut form.new);
+            secret_edit(ui, "Confirm export password", &mut form.confirm);
+            ("Export", Action::SubmitExport, "Export...")
+        }
+        MaintenanceKind::Import => {
+            ui.label("Import (you will choose the export file and its secret-key file)");
+            secret_edit(ui, "Export password", &mut form.new);
+            ("Import", Action::SubmitImport, "Import...")
+        }
+    };
+    let mut action = None;
+    if ui.button(button).clicked() {
+        action = Some(submit);
+    }
+    if ui.button("Cancel").clicked() {
+        action = Some(Action::CancelMaintenance);
+    }
+    action
+}
