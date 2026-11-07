@@ -2,7 +2,8 @@
 
 use crate::config::Theme;
 use crate::secret_buf::SecretBuf;
-use crate::state::{Action, AppState, Screen};
+use crate::state::{Action, AppState, FieldRef, Screen};
+use onlypassword_core::ItemKind;
 
 /// Draw the current screen and dispatch what the user did.
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
@@ -16,7 +17,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             Screen::Open => open(ui, state),
             Screen::Create => create(ui, state),
             Screen::Unlock => unlock(ui, state),
-            Screen::Browse => browse(ui),
+            Screen::Browse => browse(ui, state),
+            Screen::Detail(_) => detail(ui, state),
             Screen::Settings => settings(ui, state),
         };
         if let Some(action) = action {
@@ -173,12 +175,137 @@ pub fn create(ui: &mut egui::Ui, state: &mut AppState) -> Option<Action> {
     action
 }
 
-/// Placeholder browse screen.
-pub fn browse(ui: &mut egui::Ui) -> Option<Action> {
+/// What a masked field draws instead of its text: fixed, whatever the length.
+pub const MASK: &str = "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}";
+
+/// Browse screen: search box and the list of rows.
+pub fn browse(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
     ui.label("Unlocked");
     let mut action = None;
+    ui.horizontal(|ui| {
+        let l = ui.label("Search");
+        let mut text = state.search_text().to_owned();
+        if ui
+            .add(egui::TextEdit::singleline(&mut text))
+            .labelled_by(l.id)
+            .changed()
+        {
+            action = Some(Action::Search(text));
+        }
+    });
+    for (i, row) in state.rows().iter().enumerate() {
+        ui.push_id(i, |ui| {
+            let text = match &row.username {
+                Some(u) => format!("{} ({})", row.title, u),
+                None => row.title.clone(),
+            };
+            if ui.button(text).clicked() {
+                action = Some(Action::Select(row.id.clone()));
+            }
+        });
+    }
     if ui.button("Settings").clicked() {
         action = Some(Action::ShowSettings);
+    }
+    if ui.button("Lock").clicked() {
+        action = Some(Action::Lock);
+    }
+    action
+}
+
+/// One masked field: placeholder (or the revealed text) and a Reveal/Hide toggle.
+fn masked(
+    ui: &mut egui::Ui,
+    state: &AppState,
+    name: &str,
+    field: FieldRef,
+    value: &str,
+    action: &mut Option<Action>,
+) {
+    let shown = state.is_revealed(field);
+    ui.horizontal(|ui| {
+        ui.label(format!("{name}:"));
+        ui.label(if shown { value } else { MASK });
+        let verb = if shown { "Hide" } else { "Reveal" };
+        if ui.button(format!("{verb} {name}")).clicked() {
+            *action = Some(Action::ToggleReveal(field));
+        }
+    });
+}
+
+/// Detail screen of the selected login or note.
+pub fn detail(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
+    let mut action = None;
+    if let Some(stored) = state.selected() {
+        let item = &stored.item;
+        ui.label(item.title.as_str());
+        match item.kind {
+            ItemKind::Login => {
+                if let Some(u) = &item.username {
+                    ui.label(format!("Username: {u}"));
+                }
+                if let Some(p) = &item.password {
+                    masked(
+                        ui,
+                        state,
+                        "Password",
+                        FieldRef::Password,
+                        p.expose(),
+                        &mut action,
+                    );
+                }
+                for u in &item.urls {
+                    ui.label(format!("URL: {u}"));
+                }
+                masked(
+                    ui,
+                    state,
+                    "Notes",
+                    FieldRef::Notes,
+                    item.notes.expose(),
+                    &mut action,
+                );
+                if let Some(t) = &item.totp {
+                    masked(
+                        ui,
+                        state,
+                        "TOTP secret",
+                        FieldRef::TotpSecret,
+                        t.secret.expose(),
+                        &mut action,
+                    );
+                }
+                for (i, c) in item.fields.iter().enumerate() {
+                    ui.push_id(i, |ui| {
+                        if c.hidden {
+                            masked(
+                                ui,
+                                state,
+                                &c.name,
+                                FieldRef::Custom(i),
+                                c.value.expose(),
+                                &mut action,
+                            );
+                        } else {
+                            ui.label(format!("{}: {}", c.name, c.value.expose()));
+                        }
+                    });
+                }
+            }
+            ItemKind::Note => {
+                masked(
+                    ui,
+                    state,
+                    "Notes",
+                    FieldRef::Notes,
+                    item.notes.expose(),
+                    &mut action,
+                );
+            }
+        }
+    }
+    if ui.button("Back").clicked() {
+        action = Some(Action::Back);
     }
     if ui.button("Lock").clicked() {
         action = Some(Action::Lock);

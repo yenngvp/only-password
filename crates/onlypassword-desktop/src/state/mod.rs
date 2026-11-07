@@ -5,9 +5,11 @@ use std::path::{Path, PathBuf};
 
 use onlypassword_core::crypto::kdf::KdfParams;
 use onlypassword_core::crypto::keys::SecretKey;
-use onlypassword_core::{keyfile, SecretString, Vault};
+use onlypassword_core::{keyfile, ItemId, SecretString, Vault};
 
+pub mod browse;
 pub mod idle;
+pub use browse::{Detail, FieldRef, Row};
 pub mod settings;
 
 use std::time::Duration;
@@ -36,6 +38,7 @@ pub enum Screen {
     Create,
     Unlock,
     Browse,
+    Detail(ItemId),
     Settings,
 }
 
@@ -61,6 +64,11 @@ pub enum Action {
     CloseSettings,
     /// Validate and save the settings form.
     SaveSettings,
+    Search(String),
+    Select(ItemId),
+    ToggleReveal(FieldRef),
+    /// Leave the detail screen.
+    Back,
     /// User input happened: restart the idle timer.
     Activity,
 }
@@ -69,6 +77,7 @@ pub enum Action {
 pub struct Session {
     pub vault: Vault,
     pub key: SecretKey,
+    browse: browse::BrowseState,
 }
 
 /// Form buffers of the open and unlock screens.
@@ -219,6 +228,9 @@ impl AppState {
                     self.idle.touch(self.deps.clock.now());
                 }
             }
+            Action::Search(_) | Action::Select(_) | Action::ToggleReveal(_) | Action::Back => {
+                self.browse_action(action)
+            }
             Action::ShowSettings => self.show_settings(),
             Action::CloseSettings => self.close_settings(),
             Action::SaveSettings => self.save_settings(),
@@ -294,7 +306,7 @@ impl AppState {
                 self.wipe_requested = true;
             }
             Screen::Open | Screen::Unlock => self.clear_open_password(),
-            Screen::Browse | Screen::Settings => {}
+            Screen::Browse | Screen::Detail(_) | Screen::Settings => {}
         }
     }
 
@@ -321,7 +333,7 @@ impl AppState {
         let key = keyfile::read(Path::new(&self.open.key_path))?;
         let password = SecretString::new(self.open.password.expose().to_owned());
         let vault = Vault::unlock(&vault_path, &password, &key)?;
-        self.session = Some(Session { vault, key });
+        self.session = Some(Session::new(vault, key));
         Ok(vault_path)
     }
 
@@ -356,7 +368,7 @@ impl AppState {
         let vault = Vault::create_with_key_file(&vault_path, &key_path, &password, self.deps.kdf)?;
         match keyfile::read(&key_path) {
             Ok(key) => {
-                self.session = Some(Session { vault, key });
+                self.session = Some(Session::new(vault, key));
                 Ok(vault_path)
             }
             Err(e) => {
@@ -382,7 +394,7 @@ impl AppState {
 
     fn lock_now(&mut self) {
         if let Some(session) = self.session.take() {
-            let Session { vault, key } = session;
+            let Session { vault, key, .. } = session;
             vault.lock();
             drop(key);
         }
