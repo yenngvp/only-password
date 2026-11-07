@@ -11,6 +11,8 @@ pub mod browse;
 pub mod idle;
 pub use browse::{Detail, FieldRef, Row};
 pub mod settings;
+pub mod totp;
+pub use totp::{totp_view, TotpView};
 
 use std::time::Duration;
 
@@ -235,6 +237,7 @@ impl AppState {
     /// Timers. The idle lock comes first, before any other pending work.
     pub fn tick(&mut self) {
         self.check_idle();
+        self.refresh_totp();
         if let Err(e) = self.clipboard.poll(self.deps.clock.now()) {
             self.notice = Some(e);
         }

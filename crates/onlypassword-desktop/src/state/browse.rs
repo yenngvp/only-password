@@ -6,6 +6,7 @@ use std::fmt;
 use onlypassword_core::{ItemId, ItemKind, StoredItem, Vault};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
+use super::totp::{totp_view, TotpView};
 use super::{Action, AppState, Screen, Session};
 
 /// A masked field of the detail screen.
@@ -14,6 +15,8 @@ pub enum FieldRef {
     Password,
     Notes,
     TotpSecret,
+    /// The current TOTP code (never revealable: it is shown in the clear).
+    TotpCode,
     /// Index into the item's custom fields.
     Custom(usize),
 }
@@ -69,6 +72,7 @@ impl Detail {
             FieldRef::Password => item.password.as_ref().map(|p| p.expose()),
             FieldRef::Notes => Some(item.notes.expose()),
             FieldRef::TotpSecret => item.totp.as_ref().map(|t| t.secret.expose()),
+            FieldRef::TotpCode => None,
             FieldRef::Custom(i) => item.fields.get(i).map(|c| c.value.expose()),
         }
     }
@@ -81,6 +85,7 @@ pub(super) struct BrowseState {
     pub search: Zeroizing<String>,
     pub detail: Option<Detail>,
     pub reveal: BTreeSet<FieldRef>,
+    pub totp: Option<TotpView>,
 }
 
 impl fmt::Debug for BrowseState {
@@ -126,6 +131,7 @@ impl Session {
         if let Some(d) = &self.browse.detail {
             if self.vault.get(&d.0.id).is_err() {
                 self.browse.detail = None;
+                self.browse.totp = None;
                 self.browse.reveal.clear();
             }
         }
@@ -150,6 +156,26 @@ impl AppState {
             .map(|d| &d.0)
     }
 
+    /// The TOTP code and countdown of the open item, if it has a TOTP configuration.
+    pub fn totp(&self) -> Option<&TotpView> {
+        self.session.as_ref().and_then(|s| s.browse.totp.as_ref())
+    }
+
+    /// Recompute the TOTP view from the held item and the clock.
+    pub(super) fn refresh_totp(&mut self) {
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        let unix = self.deps.clock.unix_secs();
+        let view = session
+            .browse
+            .detail
+            .as_ref()
+            .and_then(|d| d.0.item.totp.as_ref())
+            .map(|c| totp_view(c, unix));
+        session.browse.totp = view;
+    }
+
     pub fn revealed(&self) -> Option<&BTreeSet<FieldRef>> {
         self.session.as_ref().map(|s| &s.browse.reveal)
     }
@@ -170,7 +196,17 @@ impl AppState {
                 let Some(d) = &session.browse.detail else {
                     return;
                 };
-                let Some(text) = d.field_text(f) else {
+                let text = if f == FieldRef::TotpCode {
+                    session
+                        .browse
+                        .totp
+                        .as_ref()
+                        .and_then(|t| t.code.as_ref())
+                        .map(|c| c.as_str())
+                } else {
+                    d.field_text(f)
+                };
+                let Some(text) = text else {
                     return;
                 };
                 let now = self.deps.clock.now();
@@ -193,10 +229,13 @@ impl AppState {
                 match session.vault.get(&id) {
                     Ok(item) => {
                         session.browse.detail = Some(Detail(item));
+                        session.browse.totp = None;
+                        self.refresh_totp();
                         self.screen = Screen::Detail(id);
                     }
                     Err(e) => {
                         session.browse.detail = None;
+                        session.browse.totp = None;
                         self.screen = Screen::Browse;
                         self.notice = Some(e.into());
                     }
@@ -213,6 +252,7 @@ impl AppState {
                     FieldRef::Password => d.0.item.password.is_some(),
                     FieldRef::Notes => true,
                     FieldRef::TotpSecret => d.0.item.totp.is_some(),
+                    FieldRef::TotpCode => false,
                     FieldRef::Custom(i) => d.0.item.fields.get(i).is_some_and(|c| c.hidden),
                 };
                 if valid && !session.browse.reveal.remove(&f) {
@@ -222,6 +262,7 @@ impl AppState {
             Action::Back => {
                 if matches!(self.screen, Screen::Detail(_)) {
                     session.browse.detail = None;
+                    session.browse.totp = None;
                     session.browse.reveal.clear();
                     self.screen = Screen::Browse;
                 }
