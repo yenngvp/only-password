@@ -33,7 +33,7 @@ pub use item::{
 };
 pub use secret::{SecretBytes, SecretString, SecretVec};
 pub use totp::{hotp, totp, totp_for_item};
-pub use vault::{Clock, ItemSummary, StoredItem, SystemClock, Vault};
+pub use vault::{Clock, ItemIndex, ItemSummary, StoredItem, SystemClock, Vault};
 
 #[cfg(test)]
 mod tests {
