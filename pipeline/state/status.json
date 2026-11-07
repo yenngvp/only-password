@@ -366,9 +366,9 @@
       ]
     },
     "F024-desktop-skeleton": {
-      "status": "blocked",
-      "attempts": 3,
-      "cost_usd": 0.4442,
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.6203,
       "history": [
         {
           "attempt": 1,
@@ -385,10 +385,17 @@
           "attempt": 3,
           "generator_run": ".pipeline/runs/20261107-075147-generator-agent_F024-desktop-skeleton",
           "outcome": "boundary_violation"
+        },
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-080043-generator-agent_F024-desktop-skeleton",
+          "gate_log": ".pipeline/runs/20261107-081121-gate-agent_F024-desktop-skeleton/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-081812-evaluator-agent_F024-desktop-skeleton",
+          "evaluator_summary": "Adds the onlypassword-desktop crate (lib+bin, forbid(unsafe_code), panic-free cfg_attr, eframe 0.37 glow/default_fonts/wayland/x11 without persistence, egui, egui_kittest dev-dep, core path dep with test features only in dev-dependencies). view::show draws heading and Locked in a CentralPanel; main.rs is the sole run_native call site. The headless kittest smoke test passes when run by me (cargo test -p onlypassword-desktop --locked). No changes under core, cli, pipeline or spec. The egui 0.37 API deviation (Ui instead of Context) is recorded in spec-issues.md as the closest safe reading. I did not rerun the gate or the cross-target checks; I rely on the notes and the earlier gate pass for those.",
+          "outcome": "passed"
         }
-      ],
-      "pending_feedback": "The driver rejected the branch because it breaks the boundary rules:\n- agent/F024-desktop-skeleton is not built on top of main (merge origin/main into it; do not rebase)\nUndo those changes on this branch (for a file that exists on main: `git checkout origin/main -- <path>`; for a new file: `git rm`), then commit."
+      ]
     }
   },
-  "total_cost_usd": 16.698
+  "total_cost_usd": 16.8741
 }
