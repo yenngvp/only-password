@@ -16,7 +16,11 @@ path = "src/main.rs"
 onlypassword-core = { path = "../onlypassword-core" }
 eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "wayland", "x11"] }
 egui = { version = "0.37", default-features = false }
+directories = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
 egui_kittest = "0.37"
+tempfile = "3"
 onlypassword-core = { path = "../onlypassword-core", features = ["insecure-fast-kdf", "test-hooks"] }
