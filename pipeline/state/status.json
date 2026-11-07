@@ -455,7 +455,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F029-desktop-idle-settings": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.7567,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-100655-generator-agent_F029-desktop-idle-settings",
+          "gate_log": ".pipeline/runs/20261107-101653-gate-agent_F029-desktop-idle-settings/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-102414-evaluator-agent_F029-desktop-idle-settings",
+          "evaluator_summary": "Adds IdleTimer, Settings screen/SaveSettings, theme application, repaint_after and activity/tick wiring in DesktopApp. Idle check runs in tick and at the start of every dispatch, so a long gap locks before queued actions (including a late Activity) are applied. SaveSettings validates through Config::validate, applies to the running timer, saves via ConfigStore and keeps the in-memory values on write failure. I ran `cargo test -p onlypassword-desktop`: all tests pass. I did not rerun the gate (it was reported passed). Everything else was verified by reading code and tests. One minor UX issue is noted.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 19.1888
+  "total_cost_usd": 19.9455
 }
