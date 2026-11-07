@@ -12,5 +12,7 @@
 //! The onlypassword desktop application (library part).
 
 pub mod app;
+pub mod config;
+pub mod error;
 pub mod state;
 pub mod view;
