@@ -43,3 +43,4 @@ Open items for the owner after the run: the planner's additions to
 `spec/OPEN-QUESTIONS.md` (phase 2 section), `agent-notes/spec-issues.md`,
 `agent-notes/dep-requests.md` if present, and the pilot-era items already listed
 there (F008 error variant, wordlist, Argon2 p=4 on iOS).
+- deny.toml: added Ubuntu-font-1.0 after the first F024 gate run rejected epaint_default_fonts on it (2026-11-07 07:51).
