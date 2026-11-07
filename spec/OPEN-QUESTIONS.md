@@ -77,3 +77,43 @@ giving feedback to the planner; nothing here blocks the build.
     vault key; use `passwd --rotate` after a suspected password compromise (CS §6.5).
 18. **Unicode tables.** NFKC output follows the `unicode-normalization` version in
     `Cargo.lock`; accepted, with a fixed-result test (CS §3.1).
+
+## Phase 2 (desktop application)
+
+Defaults applied unattended; each can be changed by giving feedback to the planner.
+
+19. **GUI stack.** *Default:* `egui`/`eframe` with the `glow` renderer, one crate for Windows, macOS and
+    Linux (owner decision in the brief). *Why:* the gate is cargo-only. Consequence: egui is immediate-mode and
+    keeps text in its own caches (threat-model residual risk 8); native look and accessibility are
+    weaker than SwiftUI/Tauri.
+20. **Dependencies.** *Default:* eframe, egui, egui_kittest (dev), arboard, rfd (gtk3 on Linux), directories; `serde`,
+    `serde_json`, `sha2`, `zeroize`, `tempfile` reused. `persistence`, `wgpu`, `image-data`, `xdg-portal`, `snapshot` are
+    excluded. *Why:* fewest crates that cover clipboard, file dialogs, the OS config directory and headless UI
+    tests. The planner could not verify exact feature names or the licence/advisory outcome (list in `approved-deps.txt`).
+21. **Core additions.** *Default:* two small, own features on the core before the GUI: `Vault::index()` (cached
+    summaries so search does not decrypt every record per keystroke) and key-file helpers
+    (`keyfile::read`, `write_new`, `Vault::create_with_key_file`). *Why:* the pilot's key-file logic lives in the CLI crate;
+    the desktop must not copy it. The CLI is deliberately not refactored onto them (brief: pilot untouched); two copies of the
+    key-file reader exist until the owner decides otherwise. No change to `crypto-spec.md`, the vault format, the export
+    format or `spec/vectors/`.
+22. **Clipboard.** *Default:* 30 s, range 5–600 s, cleared only if the clipboard still holds the copied text
+    (compared by SHA-256 digest; the text itself is not kept); also cleared at lock and at exit; marked "sensitive" where
+    the crate allows. *Why:* clearing a different value the user copied later would be harmful; a digest avoids keeping plaintext.
+    Clearing at lock goes beyond the brief and is cheap safety. Clipboard history that ignores the hint is out of scope.
+23. **Idle timeout.** *Default:* 300 s, range 10 s–24 h; there is no "never". *Why:* an unlimited unlock would defeat the
+    feature; the owner can still choose 24 h. Activity means any input event; the timer is monotonic.
+24. **Config file.** *Default:* `config.json` via `directories::ProjectDirs::from("", "", "onlypassword")`, five keys, strict parse, 4 KiB cap; an
+    invalid file means defaults plus a notice and is not rewritten until settings are saved. The key-file path is **not**
+    remembered (brief: only the last vault path), so the owner picks the key file at each unlock.
+25. **Secret key in memory.** *Default:* the unlocked session keeps the `SecretKey` (zeroized on lock) because
+    export and password change need it; the owner is not asked for the key file again for those. Import asks for the
+    source key file, as the CLI does.
+26. **Blocking work.** *Default:* Argon2id and native dialogs run on the UI thread (the window freezes for about a second at unlock). *Why:* a worker
+    thread complicates headless tests; acceptable for a personal app. Revisit if the freeze annoys.
+27. **Key text not shown at creation.** *Default:* the new secret key is written to the chosen file and never displayed, matching the CLI's `init`. The owner
+    must back up that file. A "show once" screen was left out because it would put the key on screen and in egui caches.
+28. **Password change in the GUI.** *Default:* the change form offers "also rotate the vault key", on by default (the CLI needs `--rotate`). *Why:* T-PWCHANGE
+    says rotation is the real remedy; the owner can untick it.
+29. **Testing on Windows and macOS.** *Default:* the pipeline only runs `cargo check` for the two targets; nobody runs the app there. Linking, clipboard
+    behaviour, dialogs and 0600/ACL behaviour on those systems need a human test before a release.
+30. **Theme.** *Default:* System / Light / Dark; "System" follows what eframe reports and falls back to light.

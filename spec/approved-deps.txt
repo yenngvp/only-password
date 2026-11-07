@@ -3,14 +3,30 @@
 argon2                # Argon2id password hashing (RFC 9106); core. Features: `alloc`, and `zeroize` if offered (wipes the 64 MiB working memory). NOT `parallel` (needs rayon, not approved; p = 4 is computed sequentially)
 chacha20poly1305      # XChaCha20-Poly1305 AEAD; core (default features suffice)
 hkdf                  # HKDF-SHA-256 (RFC 5869); core
-sha2                  # SHA-256 for HKDF and file binding; SHA-512 for TOTP; core
+sha2                  # SHA-256 for HKDF and file binding; SHA-512 for TOTP; core; desktop (SHA-256 digest of the copied text in the clipboard service only)
 sha1                  # SHA-1 for HMAC-SHA-1 in HOTP/TOTP only; core
 hmac                  # HMAC for HOTP/TOTP only; core
-zeroize               # zeroize-on-drop for secrets (enable the derive feature); core and cli
+zeroize               # zeroize-on-drop for secrets (enable the derive feature); core, cli and desktop
 getrandom             # operating-system random source; core
-serde                 # derive for item and export JSON (enable the derive feature); core
-serde_json            # JSON for item plaintext, export payload and test vector loading; core and dev
+serde                 # derive for item and export JSON (enable the derive feature); core and desktop (config file struct)
+serde_json            # JSON for item plaintext, export payload and test vector loading; core, desktop (config file) and dev
 unicode-normalization # NFKC normalization of passwords before Argon2id; core
 bip39                 # English 2048-word list for passphrases (CC0; eff-wordlist is AGPL and fails cargo-deny); core. Fewest features that expose Language::English.word_list(); NEVER the `rand` feature (REQ-SEC-007); record the chosen feature set in agent-notes/
 rpassword             # no-echo password prompt; cli only
-tempfile              # temporary directories in tests; dev-dependency
+tempfile              # temporary directories in tests; dev-dependency (core, cli, desktop)
+# ---- Phase 2 (crates/onlypassword-desktop only). Versions chosen by the generator from the newest release the offline
+# ---- registry has; eframe, egui and egui_kittest must be the same minor version. Check docs.rs for exact feature names.
+eframe                # desktop only. default-features = false, features: `glow` (renderer, per the brief), `default_fonts`, `wayland`, `x11` (winit needs at least one window-system backend on Linux). NOT `persistence` (it stores app state to disk), NOT `wgpu`, NOT `web_screen_reader`; `accesskit` only if egui_kittest needs it to find widgets (it is needed by the tree queries; keep it if so)
+egui                  # desktop only; same version as eframe. default-features = false is fine if eframe enables what the views use; do not enable `persistence`, `serde`-based memory persistence or `callstack`
+egui_kittest          # desktop, dev-dependency only: headless widget tests over the accessibility tree. No `snapshot`, no `wgpu` feature (they pull image/GPU crates)
+arboard               # desktop only: clipboard. default-features = false; enable `wayland-data-control` for Linux Wayland if it exists in the chosen version; NEVER `image-data` (pulls image decoders). Only text is used
+rfd                   # desktop only: native open/save dialogs. default-features = false and the `gtk3` feature on Linux (libgtk-3-dev is in the container); no `xdg-portal`, no `tokio`/`async-std` features. Used only through the blocking `FileDialog`
+directories           # desktop only: OS per-user config directory via ProjectDirs (config module)
+# ---- Not verified by the planner (no registry access while planning): the generator checks docs.rs / the registry and records
+# ---- the outcome in agent-notes/. (1) Exact feature names and defaults of eframe, arboard and rfd for the chosen versions, and whether
+# ---- `default-features = false` still leaves a working Linux build (rfd needs `gtk3` or `xdg-portal` on Linux; eframe needs `x11` or `wayland`).
+# ---- (2) Whether egui_kittest needs `accesskit` enabled through eframe/egui. (3) Whether the resolved graph passes cargo-deny licences and
+# ---- advisories (deny.toml now allows MPL-2.0, BSL-1.0, OFL-1.1, LicenseRef-UFL-1.0, Unicode-DFS-2016). (4) Whether arboard exposes
+# ---- "exclude from history/cloud" setters on each OS (use them behind cfg if so; otherwise plain text set). (5) That `cargo check --all-targets
+# ---- --target x86_64-pc-windows-msvc` and `aarch64-apple-darwin` succeed offline with these crates (a crate that cannot be checked there is a spec
+# ---- issue: record it in agent-notes/spec-issues.md and `dep-requests.md`; do not add a dependency to work around it).

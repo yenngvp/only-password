@@ -361,3 +361,41 @@ Differences found: **none**. Not verifiable / not provided: any Argon2id vector 
 SHA-1/SHA-256 stand-alone, HMAC-SHA-1 beyond HOTP, HChaCha20 intermediate values, and all
 onlypassword compositions (see R-13). The XChaCha20 vector is from an Internet-Draft, not an
 RFC, as the spec states.
+
+---
+
+# Phase 2 revision (planner)
+
+Scope: the owner appended "Phase 2: desktop app" to `spec/brief.md`; the pilot (F001–F023) is built and
+frozen. This revision only extends the spec. No reviewer findings for phase 2 existed when it was written; the 21 findings
+above (R-01…R-21) were already resolved and are untouched.
+
+## What changed
+
+- `requirements.md`: new groups `IDX` (3), `KFL` (3), `GUI` (35, including the negative non-negotiables REQ-GUI-070…077),
+  `LOCK` (6), `CLIP` (6), `CFG` (8). Existing requirements are unchanged. Every brief scope item 1–9 and each non-negotiable maps to at
+  least one requirement (open/create → GUI-001..003; lock → LOCK; browse → GUI-010..012; edit → GUI-020..023; secrets on screen →
+  GUI-030..033, CLIP; TOTP → GUI-040/041; generator → GUI-050/051; maintenance → GUI-060..064; settings → CFG; key/plaintext in secret types →
+  GUI-072; no logging → GUI-070; no network → GUI-071; unsafe/deps → GUI-073; portability → GUI-074; headless tests → GUI-075).
+- `architecture.md`: new part 7 (`crates/onlypassword-desktop`): core additions, module layout, `AppState`/`Session`/`Action`, secrets in the UI
+  (`SecretBuf`, `TextBuffer` adapter, masking, reveal set), idle timer, clipboard service, config module, error surface, portability rules,
+  desktop test strategy. §§1–6 and the CLI are unchanged.
+- `threat-model.md`: new part 7–9 (desktop assets/attackers, 16 threats with requirement IDs, plain out-of-scope list, residual risks 7–12).
+- `approved-deps.txt`: added eframe, egui, egui_kittest, arboard, rfd, directories with feature restrictions; widened the comments of
+  serde, serde_json, sha2, zeroize and tempfile to include the desktop crate; listed what the planner could not verify.
+- `features.json`: F001–F023 byte-for-byte unchanged; F024–F037 appended (14 features): skeleton (cross-target gate), core index, core key
+  file, config, session/open/create/lock, idle lock + settings, browse, clipboard, TOTP, edit, generator, maintenance, hardening, end-to-end.
+  A mechanical check confirms that every REQ id in `requirements.md` appears in at least one feature and `depends_on` only names earlier ones.
+- `OPEN-QUESTIONS.md`: items 19–30. `crypto-spec.md` and `spec/vectors/` are unchanged: the GUI needs no format change.
+
+## Not resolved / for the reviewer to look at
+
+- **Unverified crate details** (no registry access while planning): exact feature names of eframe, arboard and rfd, whether
+  `default-features = false` yields a working Linux build, whether egui_kittest needs `accesskit`, whether the resolved graph passes
+  cargo-deny, and whether arboard has "exclude from history" setters on each OS. F024/F031 tell the generator to check and record.
+- **Cross-target `cargo check` of the GUI graph** (`rfd`, `arboard`, `eframe` for windows-msvc and apple-darwin) is assumed to work; if a crate
+  fails to check there, the generator is told to raise a spec issue rather than add a dependency.
+- **Core file helper duplication**: the CLI keeps its own key-file reader (pilot frozen); the owner may want a later refactor.
+- **egui text caches** cannot be zeroized by the app (residual risk 8); only mitigated by clearing egui memory.
+- **Blocking Argon2 and file dialogs** on the UI thread (residual risks 9, 10).
+- F026's read-back comparison wants a constant-time helper in the core; if the core already has one the generator should reuse it.
