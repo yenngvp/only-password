@@ -402,6 +402,8 @@ impl AppState {
             Action::Lock => {
                 if self.session.is_some() {
                     self.lock_now();
+                } else {
+                    self.wipe_idle_forms();
                 }
             }
             Action::Cancel => self.cancel(),
@@ -558,6 +560,17 @@ impl AppState {
                 self.notice = Some(e);
             }
         }
+    }
+
+    /// Lock with no session: nothing to close, but typed secrets still go (REQ-LOCK-003).
+    fn wipe_idle_forms(&mut self) {
+        let _ = self.clipboard.clear_now();
+        self.open.password.clear();
+        self.create.password.clear();
+        self.create.confirm.clear();
+        self.maint.reset();
+        self.info = None;
+        self.wipe_requested = true;
     }
 
     fn lock_now(&mut self) {
