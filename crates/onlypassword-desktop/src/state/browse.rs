@@ -88,6 +88,7 @@ pub(super) struct BrowseState {
     pub totp: Option<TotpView>,
     pub draft: Option<super::edit::Draft>,
     pub pending_delete: bool,
+    pub generator: super::generator::GeneratorState,
 }
 
 impl fmt::Debug for BrowseState {

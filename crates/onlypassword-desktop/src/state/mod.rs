@@ -10,13 +10,15 @@ use onlypassword_core::{keyfile, ItemId, SecretString, Vault};
 pub mod browse;
 pub mod edit;
 pub use edit::{Draft, DraftField};
+pub mod generator;
+pub use generator::{GeneratorMode, GeneratorState};
 pub mod idle;
 pub use browse::{Detail, FieldRef, Row};
 pub mod settings;
 pub mod totp;
 pub use totp::{totp_view, TotpView};
 
-use onlypassword_core::{ItemKind, TotpAlgorithm};
+use onlypassword_core::{ItemKind, PassphraseOptions, PasswordOptions, TotpAlgorithm};
 use std::time::Duration;
 
 use crate::clipboard::{ClipboardBackend, ClipboardService};
@@ -57,6 +59,8 @@ pub enum Screen {
     /// Add (`None`) or edit (`Some`) an item.
     Edit(Option<ItemId>),
     Settings,
+    /// The standalone generator (from Browse).
+    Generator,
 }
 
 /// User intents.
@@ -112,6 +116,21 @@ pub enum Action {
     SetFieldHidden(usize, bool),
     /// Show or hide one secret field of the draft form.
     ToggleDraftReveal(FieldRef),
+    /// Open the standalone generator (from Browse).
+    ShowGenerator,
+    /// Close the generator screen or the edit screen's side panel.
+    CloseGenerator,
+    /// Show or hide the generator side panel of the edit screen.
+    ToggleGeneratorPanel,
+    SetGeneratorMode(GeneratorMode),
+    SetPasswordOptions(PasswordOptions),
+    SetPassphraseOptions(PassphraseOptions),
+    GenerateNow,
+    UseGenerated,
+    CopyGenerated,
+    DiscardGenerated,
+    /// Show or hide the generated value.
+    ToggleGeneratedReveal,
     /// User input happened: restart the idle timer.
     Activity,
 }
@@ -330,9 +349,23 @@ impl AppState {
             | Action::SetFieldName(..)
             | Action::SetFieldHidden(..)
             | Action::ToggleDraftReveal(_) => self.edit_action(action),
+            Action::ShowGenerator
+            | Action::CloseGenerator
+            | Action::ToggleGeneratorPanel
+            | Action::SetGeneratorMode(_)
+            | Action::SetPasswordOptions(_)
+            | Action::SetPassphraseOptions(_)
+            | Action::GenerateNow
+            | Action::UseGenerated
+            | Action::CopyGenerated
+            | Action::DiscardGenerated
+            | Action::ToggleGeneratedReveal => self.generator_action(action),
             Action::ShowSettings => {
                 if matches!(self.screen, Screen::Edit(_)) {
                     self.drop_draft();
+                }
+                if self.screen == Screen::Generator {
+                    self.generator_action(Action::DiscardGenerated);
                 }
                 self.show_settings()
             }
@@ -410,7 +443,11 @@ impl AppState {
                 self.wipe_requested = true;
             }
             Screen::Open | Screen::Unlock => self.clear_open_password(),
-            Screen::Browse | Screen::Detail(_) | Screen::Edit(_) | Screen::Settings => {}
+            Screen::Browse
+            | Screen::Detail(_)
+            | Screen::Edit(_)
+            | Screen::Settings
+            | Screen::Generator => {}
         }
     }
 

@@ -151,6 +151,7 @@ impl AppState {
             s.browse.draft = None;
             s.browse.pending_delete = false;
         }
+        self.close_generator_panel();
         self.wipe_requested = true;
         if let Screen::Edit(id) = &self.screen {
             let has_detail = self
@@ -275,6 +276,7 @@ impl AppState {
         match result {
             Ok(id) => {
                 session.browse.draft = None;
+                session.browse.generator.close();
                 session.browse.pending_delete = false;
                 session.browse.reveal.clear();
                 session.refresh_rows();
