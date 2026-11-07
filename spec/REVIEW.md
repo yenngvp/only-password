@@ -372,7 +372,7 @@ above (R-01…R-21) were already resolved and are untouched.
 
 ## What changed
 
-- `requirements.md`: new groups `IDX` (3), `KFL` (3), `GUI` (35, including the negative non-negotiables REQ-GUI-070…077),
+- `requirements.md`: new groups `IDX` (3), `KFL` (3), `GUI` (31, including the negative non-negotiables REQ-GUI-070…077),
   `LOCK` (6), `CLIP` (6), `CFG` (8). Existing requirements are unchanged. Every brief scope item 1–9 and each non-negotiable maps to at
   least one requirement (open/create → GUI-001..003; lock → LOCK; browse → GUI-010..012; edit → GUI-020..023; secrets on screen →
   GUI-030..033, CLIP; TOTP → GUI-040/041; generator → GUI-050/051; maintenance → GUI-060..064; settings → CFG; key/plaintext in secret types →
