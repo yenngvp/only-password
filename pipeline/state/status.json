@@ -425,7 +425,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F027-desktop-config": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.4235,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-090321-generator-agent_F027-desktop-config",
+          "gate_log": ".pipeline/runs/20261107-093708-gate-agent_F027-desktop-config/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-094409-evaluator-agent_F027-desktop-config",
+          "evaluator_summary": "Adds the desktop `error` module (closed UiError enum with literal Display strings, Core variant delegating to the core's Display, From<core::Error>) and the `config` module (Theme, Config defaults 300/30/System/None, validate, ConfigStore::new/platform_default/load/save). Load uses a bounded read (take(4097), rejects >4096), strict UTF-8, a private mirror struct with deny_unknown_fields, a version==1 check and a range check. Every failure returns defaults plus ConfigInvalid and load never writes. Save validates first, writes config.json.tmp with create_new and mode 0600 on Unix, calls sync_all, renames, and removes the tmp file on any failure. Only <dir>/config.json and its tmp file are touched. No unwrap, expect, indexing or arithmetic on file-derived values in non-test code. Dependencies are all in approved-deps.txt. I could NOT build or run the tests: the evaluation container has no crates registry or vendored crates (cargo --offline fails resolving argon2). The verdict rests on reading the code and tests, and on the statement that the gate already passed in a clean container. By reading, every acceptance criterion has a test that can fail. Only minor findings.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 17.8853
+  "total_cost_usd": 18.3088
 }
