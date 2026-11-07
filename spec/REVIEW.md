@@ -413,3 +413,17 @@ Checked and found correct, no change needed:
 
 Fixed:
 - `approved-deps.txt`: the planner's earlier "unverified" caveat is now partly verified against crates.io metadata. Confirmed that the named features exist (eframe 0.37 `glow`/`default_fonts`/`wayland`/`x11`; arboard 3.7 `wayland-data-control`; rfd 0.17 `gtk3`), and that egui_kittest 0.37 is headless without `snapshot`/`wgpu`. Recorded which default features must stay off. The generator still checks cargo-deny and cross-target results.
+
+---
+
+## Self-review (phase 2 revision, third pass: independent re-check)
+
+Re-verified, no change needed: F001-F023 equal `main:spec/features.json` exactly (mechanical compare; F024-F037 appended, `depends_on` earlier only);
+F024 is gate-complete alone (workspace member, forbid(unsafe), headless kittest test, both cross-target checks, no display needed since `view::show`
+runs through `egui_kittest::Harness` and `main` is never executed); identifiers used by F024-F037 match architecture.md 7 (extra `Action` variants such as
+`AddField`/`RotateKey` fall under "the exact variant set is the generator's"); no phase-2 text touches `crypto-spec.md`, vectors or a pilot requirement.
+Crate metadata checked on the crates.io API: eframe 0.37.0 (`glow`, `default_fonts`, `wayland`, `x11` exist), egui_kittest 0.37.0 (features `eframe`, `snapshot`, `video`, `wgpu`, `x11`;
+its egui dependency has no default features and `kittest` is the only extra normal crate; headless), arboard 3.7.0 (`wayland-data-control`; default `image-data` off), rfd 0.17.2 (`gtk3`; default `xdg-portal`+`wayland` off).
+
+Fixed: `approved-deps.txt` said eframe `accesskit` might be needed for kittest. It is not (egui always depends on accesskit; eframe's `accesskit` is a default-only feature
+for the window). The note now says to leave it off, which keeps the graph smaller. Also recorded that rfd `gtk3` crates are Linux-only cfg deps, so cross-target checks are unaffected.

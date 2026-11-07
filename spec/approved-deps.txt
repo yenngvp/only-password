@@ -16,7 +16,7 @@ rpassword             # no-echo password prompt; cli only
 tempfile              # temporary directories in tests; dev-dependency (core, cli, desktop)
 # ---- Phase 2 (crates/onlypassword-desktop only). Versions chosen by the generator from the newest release the offline
 # ---- registry has; eframe, egui and egui_kittest must be the same minor version. Check docs.rs for exact feature names.
-eframe                # desktop only. default-features = false, features: `glow` (renderer, per the brief), `default_fonts`, `wayland`, `x11` (winit needs at least one window-system backend on Linux). NOT `persistence` (it stores app state to disk), NOT `wgpu`, NOT `web_screen_reader`; `accesskit` only if egui_kittest needs it to find widgets (it is needed by the tree queries; keep it if so)
+eframe                # desktop only. default-features = false, features: `glow` (renderer, per the brief), `default_fonts`, `wayland`, `x11` (winit needs at least one window-system backend on Linux). NOT `persistence` (it stores app state to disk), NOT `wgpu`, NOT `web_screen_reader`; `accesskit` is NOT needed: egui 0.37 depends on accesskit unconditionally, and egui_kittest queries that tree without eframe's `accesskit` feature (only egui_kittest's own `eframe` feature, which stays off, enables it)
 egui                  # desktop only; same version as eframe. default-features = false is fine if eframe enables what the views use; do not enable `persistence`, `serde`-based memory persistence or `callstack`
 egui_kittest          # desktop, dev-dependency only: headless widget tests over the accessibility tree. No `snapshot`, no `wgpu` feature (they pull image/GPU crates)
 arboard               # desktop only: clipboard. default-features = false; enable `wayland-data-control` for Linux Wayland if it exists in the chosen version; NEVER `image-data` (pulls image decoders). Only text is used
@@ -34,3 +34,4 @@ directories           # desktop only: OS per-user config directory via ProjectDi
 # ---- system_fonts (clipboard/links/system_fonts/web_screen_reader/wgpu/accesskit are default features and stay OFF here; the app uses its own clipboard service).
 # ---- egui_kittest 0.37 features: eframe, snapshot, video, wgpu, x11 (none needed; the default build is headless). arboard 3.7: wayland-data-control exists; default = image-data (turn off).
 # ---- rfd 0.17: gtk3, xdg-portal, wayland, common-controls-v6; default = xdg-portal + wayland (turn off, enable gtk3 on Linux only).
+# ---- Second self-review (crates.io API, 2026-11): rfd's gtk3 deps (gtk-sys, glib-sys, gobject-sys) are cfg(linux/BSD) only, so enabling `gtk3` is harmless for the windows-msvc and apple-darwin checks.
