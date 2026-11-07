@@ -1,17 +1,349 @@
-//! Application state (no egui here).
+//! Application state machine (no egui here).
+
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+use onlypassword_core::crypto::kdf::KdfParams;
+use onlypassword_core::crypto::keys::SecretKey;
+use onlypassword_core::{keyfile, SecretString, Vault};
+
+use crate::clock::UiClock;
+use crate::config::{Config, ConfigStore};
+use crate::error::UiError;
+use crate::picker::FilePicker;
+use crate::secret_buf::SecretBuf;
+
+/// Everything the state machine needs from the outside world.
+pub struct AppDeps {
+    pub clock: Box<dyn UiClock>,
+    pub picker: Box<dyn FilePicker>,
+    pub config_store: Option<ConfigStore>,
+    /// KDF cost for new vaults (`KdfParams::DEFAULT` in the real app).
+    pub kdf: KdfParams,
+}
 
 /// The screen currently shown.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Screen {
     Open,
+    Create,
+    Unlock,
+    Browse,
 }
 
-/// Minimal state; later features replace `Default` with `AppState::new(AppDeps)`.
-#[derive(Debug, Default)]
-pub struct AppState {}
+/// User intents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Action {
+    /// Unlock with the open/unlock form.
+    SubmitOpen,
+    /// Create with the create form.
+    SubmitCreate,
+    Lock,
+    /// Leave the create form (or the open form back to unlock) and clear it.
+    Cancel,
+    ShowCreate,
+    ShowOpen,
+    BrowseVault,
+    BrowseKeyFile,
+    BrowseNewVault,
+    BrowseNewKeyFile,
+}
+
+/// The unlocked state: vault and key (the key is needed by later features).
+pub struct Session {
+    pub vault: Vault,
+    pub key: SecretKey,
+}
+
+/// Form buffers of the open and unlock screens.
+#[derive(Default)]
+pub struct OpenForm {
+    pub vault_path: String,
+    pub key_path: String,
+    pub password: SecretBuf,
+}
+
+/// Form buffers of the create screen.
+#[derive(Default)]
+pub struct CreateForm {
+    pub vault_path: String,
+    pub key_path: String,
+    pub password: SecretBuf,
+    pub confirm: SecretBuf,
+}
+
+/// The whole UI state. No `Clone`; `Debug` is redacted.
+pub struct AppState {
+    deps: AppDeps,
+    config: Config,
+    screen: Screen,
+    notice: Option<UiError>,
+    session: Option<Session>,
+    open: OpenForm,
+    create: CreateForm,
+    wipe_requested: bool,
+}
+
+impl fmt::Debug for AppState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AppState")
+            .field("screen", &self.screen)
+            .field("unlocked", &self.session.is_some())
+            .field("has_notice", &self.notice.is_some())
+            .finish()
+    }
+}
 
 impl AppState {
-    pub fn screen(&self) -> &Screen {
-        &Screen::Open
+    /// Load the config; start on Unlock if a last vault is known, else Open.
+    pub fn new(deps: AppDeps) -> AppState {
+        let (config, notice) = match &deps.config_store {
+            Some(store) => store.load(),
+            None => (Config::default(), None),
+        };
+        let mut open = OpenForm::default();
+        let screen = match config.last_vault_path.as_deref().and_then(Path::to_str) {
+            Some(p) => {
+                open.vault_path = p.to_owned();
+                Screen::Unlock
+            }
+            None => Screen::Open,
+        };
+        AppState {
+            deps,
+            config,
+            screen,
+            notice,
+            session: None,
+            open,
+            create: CreateForm::default(),
+            wipe_requested: false,
+        }
     }
+
+    pub fn screen(&self) -> &Screen {
+        &self.screen
+    }
+
+    /// The last fixed error message, cleared by the next action.
+    pub fn notice(&self) -> Option<&UiError> {
+        self.notice.as_ref()
+    }
+
+    /// True when nothing secret is held (REQ-LOCK-003).
+    pub fn is_clean(&self) -> bool {
+        self.session.is_none()
+            && self.open.password.is_empty()
+            && self.create.password.is_empty()
+            && self.create.confirm.is_empty()
+            && matches!(self.screen, Screen::Open | Screen::Create | Screen::Unlock)
+    }
+
+    pub fn is_unlocked(&self) -> bool {
+        self.session.is_some()
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
+    pub fn open_form_mut(&mut self) -> &mut OpenForm {
+        &mut self.open
+    }
+
+    pub fn create_form_mut(&mut self) -> &mut CreateForm {
+        &mut self.create
+    }
+
+    /// True once after a submit, cancel or lock: the view must then drop
+    /// egui's cached text state.
+    pub fn take_wipe_request(&mut self) -> bool {
+        std::mem::take(&mut self.wipe_requested)
+    }
+
+    /// Timers (idle lock etc.) arrive with a later feature.
+    pub fn tick(&mut self) {}
+
+    /// Called when the application closes.
+    pub fn on_exit(&mut self) {
+        self.lock_now();
+    }
+
+    pub fn dispatch(&mut self, action: Action) {
+        self.notice = None;
+        match action {
+            Action::SubmitOpen => self.submit_open(),
+            Action::SubmitCreate => self.submit_create(),
+            Action::Lock => {
+                if self.session.is_some() {
+                    self.lock_now();
+                }
+            }
+            Action::Cancel => self.cancel(),
+            Action::ShowCreate => {
+                if matches!(self.screen, Screen::Open | Screen::Unlock) {
+                    self.clear_open_password();
+                    self.screen = Screen::Create;
+                }
+            }
+            Action::ShowOpen => {
+                if self.screen == Screen::Unlock {
+                    self.clear_open_password();
+                    self.screen = Screen::Open;
+                }
+            }
+            Action::BrowseVault => {
+                if self.on_open_screen() {
+                    if let Some(p) = self.deps.picker.pick_vault() {
+                        self.open.vault_path = path_text(&p);
+                    }
+                }
+            }
+            Action::BrowseKeyFile => {
+                if self.on_open_screen() {
+                    if let Some(p) = self.deps.picker.pick_key_file() {
+                        self.open.key_path = path_text(&p);
+                    }
+                }
+            }
+            Action::BrowseNewVault => {
+                if self.screen == Screen::Create {
+                    if let Some(p) = self.deps.picker.save_vault() {
+                        self.create.vault_path = path_text(&p);
+                    }
+                }
+            }
+            Action::BrowseNewKeyFile => {
+                if self.screen == Screen::Create {
+                    if let Some(p) = self.deps.picker.save_key_file() {
+                        self.create.key_path = path_text(&p);
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_open_screen(&self) -> bool {
+        matches!(self.screen, Screen::Open | Screen::Unlock)
+    }
+
+    fn clear_open_password(&mut self) {
+        self.open.password.clear();
+        self.wipe_requested = true;
+    }
+
+    fn cancel(&mut self) {
+        match self.screen {
+            Screen::Create => {
+                self.create = CreateForm::default();
+                self.screen = if self.open.vault_path.is_empty() {
+                    Screen::Open
+                } else {
+                    Screen::Unlock
+                };
+                self.wipe_requested = true;
+            }
+            Screen::Open | Screen::Unlock => self.clear_open_password(),
+            Screen::Browse => {}
+        }
+    }
+
+    fn submit_open(&mut self) {
+        if !self.on_open_screen() {
+            return;
+        }
+        let result = self.try_open();
+        self.clear_open_password();
+        match result {
+            Ok(vault_path) => {
+                self.open.key_path.clear();
+                self.finish_login(vault_path);
+            }
+            Err(e) => self.notice = Some(e),
+        }
+    }
+
+    fn try_open(&mut self) -> Result<PathBuf, UiError> {
+        if self.open.vault_path.is_empty() || self.open.key_path.is_empty() {
+            return Err(UiError::EmptyField);
+        }
+        let vault_path = PathBuf::from(&self.open.vault_path);
+        let key = keyfile::read(Path::new(&self.open.key_path))?;
+        let password = SecretString::new(self.open.password.expose().to_owned());
+        let vault = Vault::unlock(&vault_path, &password, &key)?;
+        self.session = Some(Session { vault, key });
+        Ok(vault_path)
+    }
+
+    fn submit_create(&mut self) {
+        if self.screen != Screen::Create {
+            return;
+        }
+        let result = self.try_create();
+        self.create.password.clear();
+        self.create.confirm.clear();
+        self.wipe_requested = true;
+        match result {
+            Ok(vault_path) => {
+                self.create = CreateForm::default();
+                self.finish_login(vault_path);
+            }
+            Err(e) => self.notice = Some(e),
+        }
+    }
+
+    fn try_create(&mut self) -> Result<PathBuf, UiError> {
+        let c = &self.create;
+        if c.vault_path.is_empty() || c.key_path.is_empty() {
+            return Err(UiError::EmptyField);
+        }
+        if c.password.expose() != c.confirm.expose() {
+            return Err(UiError::PasswordMismatch);
+        }
+        let vault_path = PathBuf::from(&c.vault_path);
+        let key_path = PathBuf::from(&c.key_path);
+        let password = SecretString::new(c.password.expose().to_owned());
+        let vault = Vault::create_with_key_file(&vault_path, &key_path, &password, self.deps.kdf)?;
+        match keyfile::read(&key_path) {
+            Ok(key) => {
+                self.session = Some(Session { vault, key });
+                Ok(vault_path)
+            }
+            Err(e) => {
+                vault.lock();
+                Err(e.into())
+            }
+        }
+    }
+
+    /// Enter the browse screen and remember the vault path (a save failure
+    /// only sets the notice).
+    fn finish_login(&mut self, vault_path: PathBuf) {
+        self.open.vault_path = path_text(&vault_path);
+        self.config.last_vault_path = Some(vault_path);
+        self.screen = Screen::Browse;
+        if let Some(store) = &self.deps.config_store {
+            if let Err(e) = store.save(&self.config) {
+                self.notice = Some(e);
+            }
+        }
+    }
+
+    fn lock_now(&mut self) {
+        if let Some(session) = self.session.take() {
+            let Session { vault, key } = session;
+            vault.lock();
+            drop(key);
+        }
+        self.open.password.clear();
+        self.open.key_path.clear();
+        self.create = CreateForm::default();
+        self.notice = None;
+        self.screen = Screen::Unlock;
+        self.wipe_requested = true;
+    }
+}
+
+fn path_text(p: &Path) -> String {
+    p.to_string_lossy().into_owned()
 }
