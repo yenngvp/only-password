@@ -1,6 +1,6 @@
 {
   "spec": {
-    "cost_usd": 5.3352,
+    "cost_usd": 5.5025,
     "approved": true
   },
   "features": {
@@ -366,5 +366,5 @@
       ]
     }
   },
-  "total_cost_usd": 15.8877
+  "total_cost_usd": 16.055
 }
