@@ -2,12 +2,24 @@
 
 use crate::config::Theme;
 use crate::secret_buf::SecretBuf;
-use crate::state::{Action, AppState, FieldRef, Screen};
+use crate::state::{Action, AppState, FieldRef, GeneratorMode, Screen};
 use onlypassword_core::{ItemKind, TotpAlgorithm};
+use onlypassword_core::{PassphraseOptions, PasswordOptions};
 
 /// Draw the current screen and dispatch what the user did.
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     apply_theme(ui.ctx(), state.config().theme);
+    if matches!(state.screen(), Screen::Edit(_))
+        && state.generator().is_some_and(|g| g.panel_open())
+    {
+        let mut action = None;
+        egui::Panel::right("generator").show(ui, |ui| {
+            action = generator_panel(ui, state);
+        });
+        if let Some(action) = action {
+            state.dispatch(action);
+        }
+    }
     egui::CentralPanel::default().show(ui, |ui| {
         ui.heading("onlypassword");
         if let Some(n) = state.notice() {
@@ -21,6 +33,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             Screen::Detail(_) => detail(ui, state),
             Screen::Edit(_) => edit(ui, state),
             Screen::Settings => settings(ui, state),
+            Screen::Generator => generator_panel(ui, state),
         };
         if let Some(action) = action {
             state.dispatch(action);
@@ -220,6 +233,9 @@ pub fn browse(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
     }
     if ui.button("Add Note").clicked() {
         action = Some(Action::BeginAdd(ItemKind::Note));
+    }
+    if ui.button("Generator").clicked() {
+        action = Some(Action::ShowGenerator);
     }
     if ui.button("Settings").clicked() {
         action = Some(Action::ShowSettings);
@@ -565,6 +581,9 @@ pub fn edit(ui: &mut egui::Ui, state: &mut AppState) -> Option<Action> {
             &mut action,
         );
     }
+    if ui.button("Generator").clicked() {
+        action = Some(Action::ToggleGeneratorPanel);
+    }
     if ui.button("Save").clicked() {
         action = Some(Action::SaveDraft);
     }
@@ -605,3 +624,124 @@ pub fn settings(ui: &mut egui::Ui, state: &mut AppState) -> Option<Action> {
     }
     action
 }
+
+/// A labelled number field; `Some` when the user changed it.
+fn number_field(ui: &mut egui::Ui, label: &str, value: usize, max: usize) -> Option<usize> {
+    let mut v = value;
+    let changed = ui
+        .horizontal(|ui| {
+            let l = ui.label(label);
+            ui.add(egui::DragValue::new(&mut v).range(0..=max))
+                .labelled_by(l.id)
+                .changed()
+        })
+        .inner;
+    changed.then_some(v)
+}
+
+/// Generator panel: options, the masked generated value and its buttons. Used
+/// as the side panel of the edit screen and as the standalone screen.
+pub fn generator_panel(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
+    let g = state.generator()?;
+    let mut action = None;
+    ui.label("Generator");
+    ui.horizontal(|ui| {
+        for (mode, name) in [
+            (GeneratorMode::Password, "Password mode"),
+            (GeneratorMode::Passphrase, "Passphrase mode"),
+        ] {
+            if ui.selectable_label(g.mode == mode, name).clicked() {
+                action = Some(Action::SetGeneratorMode(mode));
+            }
+        }
+    });
+    match g.mode {
+        GeneratorMode::Password => {
+            let o = &g.password;
+            if let Some(n) = number_field(ui, "Length", o.length, 1024) {
+                action = Some(Action::SetPasswordOptions(PasswordOptions {
+                    length: n,
+                    ..o.clone()
+                }));
+            }
+            let flags: [(&str, bool, FlagPick); 6] = [
+                ("Lowercase", o.lower, |o| &mut o.lower),
+                ("Uppercase", o.upper, |o| &mut o.upper),
+                ("Digits", o.digits, |o| &mut o.digits),
+                ("Symbols", o.symbols, |o| &mut o.symbols),
+                ("Exclude ambiguous", o.exclude_ambiguous, |o| {
+                    &mut o.exclude_ambiguous
+                }),
+                ("Require each class", o.require_each, |o| {
+                    &mut o.require_each
+                }),
+            ];
+            for (name, mut on, pick) in flags {
+                if ui.checkbox(&mut on, name).changed() {
+                    let mut n = o.clone();
+                    *pick(&mut n) = on;
+                    action = Some(Action::SetPasswordOptions(n));
+                }
+            }
+        }
+        GeneratorMode::Passphrase => {
+            let o = &g.passphrase;
+            if let Some(n) = number_field(ui, "Words", o.words, 1024) {
+                action = Some(Action::SetPassphraseOptions(PassphraseOptions {
+                    words: n,
+                    ..o.clone()
+                }));
+            }
+            if let Some(sep) = text_field(ui, "Separator", &o.separator) {
+                action = Some(Action::SetPassphraseOptions(PassphraseOptions {
+                    separator: sep,
+                    ..o.clone()
+                }));
+            }
+            let mut cap = o.capitalize;
+            if ui.checkbox(&mut cap, "Capitalize").changed() {
+                action = Some(Action::SetPassphraseOptions(PassphraseOptions {
+                    capitalize: cap,
+                    ..o.clone()
+                }));
+            }
+            let mut dig = o.include_digit;
+            if ui.checkbox(&mut dig, "Include digit").changed() {
+                action = Some(Action::SetPassphraseOptions(PassphraseOptions {
+                    include_digit: dig,
+                    ..o.clone()
+                }));
+            }
+        }
+    }
+    if ui.button("Generate").clicked() {
+        action = Some(Action::GenerateNow);
+    }
+    if let Some(v) = g.value() {
+        let shown = g.is_revealed();
+        ui.horizontal(|ui| {
+            ui.label("Generated:");
+            ui.label(if shown { v.expose() } else { MASK });
+        });
+        let verb = if shown { "Hide" } else { "Reveal" };
+        if ui.button(format!("{verb} generated")).clicked() {
+            action = Some(Action::ToggleGeneratedReveal);
+        }
+        if state.draft().is_some() && ui.button("Use this").clicked() {
+            action = Some(Action::UseGenerated);
+        }
+        if ui.button("Copy generated").clicked() {
+            action = Some(Action::CopyGenerated);
+        }
+        if ui.button("Discard generated").clicked() {
+            action = Some(Action::DiscardGenerated);
+        }
+    }
+    if ui.button("Close generator").clicked() {
+        action = Some(Action::CloseGenerator);
+    }
+    action
+}
+
+/// Selects one boolean option of `PasswordOptions`.
+type FlagPick = fn(&mut PasswordOptions) -> &mut bool;
