@@ -240,6 +240,27 @@ fn masked(
     });
 }
 
+/// TOTP code, countdown label and progress bar.
+pub fn totp_section(ui: &mut egui::Ui, t: &crate::state::TotpView, action: &mut Option<Action>) {
+    ui.horizontal(|ui| match (&t.code, &t.error) {
+        (Some(code), _) => {
+            ui.label(format!("TOTP code: {}", code.as_str()));
+            copy_button(ui, "TOTP code", FieldRef::TotpCode, action);
+        }
+        (None, e) => {
+            ui.label(format!(
+                "TOTP code: {}",
+                e.as_deref().unwrap_or("invalid input")
+            ));
+        }
+    });
+    if t.code.is_some() && t.period > 0 {
+        let frac = t.remaining as f32 / t.period as f32;
+        ui.label(format!("Expires in {} s", t.remaining));
+        ui.add(egui::ProgressBar::new(frac));
+    }
+}
+
 /// Detail screen of the selected login or note.
 pub fn detail(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
     let mut action = None;
@@ -281,6 +302,9 @@ pub fn detail(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
                         t.secret.expose(),
                         &mut action,
                     );
+                }
+                if let Some(t) = state.totp() {
+                    totp_section(ui, t, &mut action);
                 }
                 for (i, c) in item.fields.iter().enumerate() {
                     ui.push_id(i, |ui| {
