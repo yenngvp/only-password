@@ -142,3 +142,85 @@ create a vault, add items (a login with TOTP and custom fields, a note), lock,
 unlock, read them back, change the master password, export, import into a fresh
 vault, and confirms that after lock no plaintext remains in the application
 state.
+
+## Phase 3: commercial-grade UI, modelled on Apple's Passwords app
+
+Phase 2 delivered a working but plain desktop UI. Phase 3 replaces its look and
+layout with a polished, commercial-quality design that closely follows Apple's
+Passwords app (macOS 15 / iOS 18), while keeping every phase-2 behaviour, test
+and non-negotiable. The app state machine, core API and tests from phase 2 stay;
+the views are rebuilt on top of them. No new functionality beyond what the
+layout below needs.
+
+### Layout: three columns in one window (minimum 900×600, resizable)
+
+1. **Sidebar (left, ~200 px, slightly tinted background).** Vault name at the
+   top. Category list with an icon and a count badge per row: *All*, *Logins*,
+   *Notes*, *Codes* (items with a TOTP secret), *Security* (items whose password
+   is weak or reused, computed locally). Selected row has a filled rounded
+   highlight in the accent colour. Bottom of the sidebar: a lock button and a
+   settings (gear) button.
+2. **List column (middle, ~320 px).** A rounded pill search field at the top
+   with a magnifier icon and a clear button. Under it, one row per item: a
+   40 px rounded-square "site tile" showing the first letter of the title on a
+   colour derived from the title, the title in medium weight, the username (or
+   first line of a note) in secondary grey below. Rows are 56 px tall with a
+   hairline separator; the selected row gets a rounded accent highlight with
+   white text. A "+" toolbar button creates a new item (Login or Note via a
+   small menu). Sorting is alphabetical, grouped under letter headers like
+   Apple's list.
+3. **Detail pane (right, flexible).** Empty state shows a centred large key
+   glyph and "No Password Selected" in grey. With a selection: a header with a
+   larger site tile, the title in a bold 22 pt heading, the primary URL under
+   it, and an "Edit" button in the top-right. Below, grouped cards (rounded
+   12 px corners, card background one step lighter/darker than the pane,
+   hairline rows inside): *User Name / Password* (password shown as dots with
+   a reveal eye and a copy button that appear on hover; "Copied" feedback),
+   *Verification Code* (6-digit code in a monospaced large font grouped
+   3 3, a circular countdown ring, copy on click), *Website(s)*, *Notes*,
+   custom fields (hidden ones masked like passwords), and a footer line with
+   "Modified <date>". Edit mode turns the same cards into inline editable
+   fields with Cancel/Save in the header, a "Generate" button next to the
+   password with the phase-2 generator in a popover, and a red "Delete
+   Password…" at the bottom with a confirmation sheet.
+
+### Visual language
+
+- System look: follow the OS light/dark appearance by default (eframe's
+  `system_theme`), with a manual override in settings. Accent colour
+  #007AFF (light) / #0A84FF (dark). Backgrounds: window #FFFFFF / #1E1E1E,
+  sidebar #F5F5F7 / #2A2A2C, cards #F2F2F7 / #2C2C2E, secondary text #8E8E93.
+- Typography: a clean sans-serif via eframe's `system_fonts` feature when
+  available, falling back to egui's bundled fonts; 13 pt body, 11 pt
+  secondary, 22 pt titles. Monospaced for codes and revealed passwords.
+- Rounded corners everywhere (8 px controls, 12 px cards), hairline
+  separators at 1 px, no visible panel frames, generous 12 to 16 px padding.
+- Icons: a consistent vector icon set from an approved crates.io crate (for
+  example `egui-phosphor`), never emoji.
+- Unlock and create screens: a centred card with the app icon, vault path
+  picker, password field (masked, reveal eye), secret-key file picker and a
+  single accent "Unlock" button; errors shown inline in red under the field.
+- Motion: subtle hover states on rows and buttons; nothing blocking.
+
+### Out of scope for phase 3
+
+Passkeys, Wi-Fi, sharing groups, iCloud/sync, Safari integration, Recently
+Deleted (no trash in the core), and any new core format. Pixel-exact copying of
+Apple assets or fonts is not required and Apple trademarks and artwork must
+not be embedded.
+
+### Non-negotiables (in addition to phase 2's)
+
+- Every phase-2 headless test keeps passing; the end-to-end test is extended
+  to drive the new layout (sidebar category filter, list selection, detail
+  reveal/copy, edit/save).
+- The accessibility tree stays complete: every interactive control has a label
+  so `egui_kittest` and screen readers can find it.
+- Secrets handling, lock behaviour and clipboard rules are unchanged.
+
+### Definition of done for phase 3
+
+Every phase-3 feature has passed the gate and evaluator; the headless
+end-to-end test exercises the three-column layout end to end; a screenshot
+test or a documented manual checklist in `agent-notes/` describes what each
+screen looks like.
