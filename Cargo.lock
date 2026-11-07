@@ -1985,6 +1985,7 @@ dependencies = [
 name = "onlypassword-desktop"
 version = "0.1.0"
 dependencies = [
+ "arboard",
  "directories",
  "eframe",
  "egui",
@@ -1993,6 +1994,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "zeroize",
 ]

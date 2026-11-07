@@ -80,6 +80,9 @@ impl AppState {
         self.idle.set_timeout(Duration::from_secs(u64::from(
             self.config.idle_timeout_secs,
         )));
+        self.clipboard.set_timeout(Duration::from_secs(u64::from(
+            self.config.clipboard_clear_secs,
+        )));
         if let Some(store) = &self.deps.config_store {
             if let Err(e) = store.save(&self.config) {
                 self.notice = Some(e);

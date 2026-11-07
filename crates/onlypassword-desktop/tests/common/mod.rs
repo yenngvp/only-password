@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use onlypassword_core::crypto::kdf::KdfParams;
 use onlypassword_core::{SecretString, Vault};
+use onlypassword_desktop::clipboard::MemoryClipboard;
 use onlypassword_desktop::clock::ManualClock;
 use onlypassword_desktop::config::ConfigStore;
 use onlypassword_desktop::picker::ScriptedPicker;
@@ -13,6 +14,7 @@ pub const PW: &str = "pw-SENTINEL-correct horse";
 pub struct Env {
     pub dir: tempfile::TempDir,
     pub picker: ScriptedPicker,
+    pub clipboard: MemoryClipboard,
 }
 
 impl Env {
@@ -20,6 +22,7 @@ impl Env {
         Env {
             dir: tempfile::tempdir().unwrap(),
             picker: ScriptedPicker::new(),
+            clipboard: MemoryClipboard::new(),
         }
     }
     pub fn path(&self, name: &str) -> PathBuf {
@@ -36,6 +39,7 @@ impl Env {
         std::fs::create_dir_all(self.config_dir()).unwrap();
         let state = AppState::new(AppDeps {
             clock: Box::new(clock.clone()),
+            clipboard: Box::new(self.clipboard.clone()),
             picker: Box::new(self.picker.clone()),
             config_store: Some(ConfigStore::new(self.config_dir())),
             kdf: KdfParams::FAST_FOR_TESTS,
