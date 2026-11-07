@@ -1,10 +1,12 @@
 //! Rendering of the application state.
 
+use crate::config::Theme;
 use crate::secret_buf::SecretBuf;
 use crate::state::{Action, AppState, Screen};
 
 /// Draw the current screen and dispatch what the user did.
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
+    apply_theme(ui.ctx(), state.config().theme);
     egui::CentralPanel::default().show(ui, |ui| {
         ui.heading("onlypassword");
         if let Some(n) = state.notice() {
@@ -15,6 +17,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             Screen::Create => create(ui, state),
             Screen::Unlock => unlock(ui, state),
             Screen::Browse => browse(ui),
+            Screen::Settings => settings(ui, state),
         };
         if let Some(action) = action {
             state.dispatch(action);
@@ -25,6 +28,21 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     if state.take_wipe_request() {
         ui.ctx().memory_mut(|m| m.data.clear());
     }
+}
+
+/// The egui theme a setting selects: `System` follows what eframe reports,
+/// light when it reports nothing (REQ-CFG-006).
+pub fn effective_theme(ctx: &egui::Context, theme: Theme) -> egui::Theme {
+    match theme {
+        Theme::Light => egui::Theme::Light,
+        Theme::Dark => egui::Theme::Dark,
+        Theme::System => ctx.system_theme().unwrap_or(egui::Theme::Light),
+    }
+}
+
+/// Select the visuals for this frame.
+pub fn apply_theme(ctx: &egui::Context, theme: Theme) {
+    ctx.set_theme(effective_theme(ctx, theme));
 }
 
 /// A labelled plain-text path field with a Browse button.
@@ -101,6 +119,9 @@ pub fn unlock(ui: &mut egui::Ui, state: &mut AppState) -> Option<Action> {
     if ui.button("Create a new vault").clicked() {
         action = Some(Action::ShowCreate);
     }
+    if ui.button("Settings").clicked() {
+        action = Some(Action::ShowSettings);
+    }
     action
 }
 
@@ -155,5 +176,44 @@ pub fn create(ui: &mut egui::Ui, state: &mut AppState) -> Option<Action> {
 /// Placeholder browse screen.
 pub fn browse(ui: &mut egui::Ui) -> Option<Action> {
     ui.label("Unlocked");
-    ui.button("Lock").clicked().then_some(Action::Lock)
+    let mut action = None;
+    if ui.button("Settings").clicked() {
+        action = Some(Action::ShowSettings);
+    }
+    if ui.button("Lock").clicked() {
+        action = Some(Action::Lock);
+    }
+    action
+}
+
+/// Settings screen: idle timeout, clipboard timeout and theme.
+pub fn settings(ui: &mut egui::Ui, state: &mut AppState) -> Option<Action> {
+    ui.label("Settings");
+    let mut action = None;
+    let form = state.settings_form_mut();
+    for (label, text) in [
+        ("Idle timeout (seconds)", &mut form.idle_timeout_secs),
+        (
+            "Clipboard timeout (seconds)",
+            &mut form.clipboard_clear_secs,
+        ),
+    ] {
+        ui.horizontal(|ui| {
+            let l = ui.label(label);
+            ui.add(egui::TextEdit::singleline(text)).labelled_by(l.id);
+        });
+    }
+    ui.horizontal(|ui| {
+        ui.label("Theme");
+        ui.selectable_value(&mut form.theme, Theme::System, "System");
+        ui.selectable_value(&mut form.theme, Theme::Light, "Light");
+        ui.selectable_value(&mut form.theme, Theme::Dark, "Dark");
+    });
+    if ui.button("Save settings").clicked() {
+        action = Some(Action::SaveSettings);
+    }
+    if ui.button("Back").clicked() {
+        action = Some(Action::CloseSettings);
+    }
+    action
 }

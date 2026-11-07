@@ -7,11 +7,18 @@ use onlypassword_core::crypto::kdf::KdfParams;
 use onlypassword_core::crypto::keys::SecretKey;
 use onlypassword_core::{keyfile, SecretString, Vault};
 
+pub mod idle;
+pub mod settings;
+
+use std::time::Duration;
+
 use crate::clock::UiClock;
 use crate::config::{Config, ConfigStore};
 use crate::error::UiError;
 use crate::picker::FilePicker;
 use crate::secret_buf::SecretBuf;
+use idle::IdleTimer;
+use settings::SettingsForm;
 
 /// Everything the state machine needs from the outside world.
 pub struct AppDeps {
@@ -29,6 +36,7 @@ pub enum Screen {
     Create,
     Unlock,
     Browse,
+    Settings,
 }
 
 /// User intents.
@@ -47,6 +55,14 @@ pub enum Action {
     BrowseKeyFile,
     BrowseNewVault,
     BrowseNewKeyFile,
+    /// Open the settings screen (from Unlock or Browse).
+    ShowSettings,
+    /// Leave the settings screen without saving.
+    CloseSettings,
+    /// Validate and save the settings form.
+    SaveSettings,
+    /// User input happened: restart the idle timer.
+    Activity,
 }
 
 /// The unlocked state: vault and key (the key is needed by later features).
@@ -82,6 +98,9 @@ pub struct AppState {
     open: OpenForm,
     create: CreateForm,
     wipe_requested: bool,
+    idle: IdleTimer,
+    settings: SettingsForm,
+    settings_return: Screen,
 }
 
 impl fmt::Debug for AppState {
@@ -109,7 +128,15 @@ impl AppState {
             }
             None => Screen::Open,
         };
+        let idle = IdleTimer::new(
+            Duration::from_secs(u64::from(config.idle_timeout_secs)),
+            deps.clock.now(),
+        );
+        let settings = SettingsForm::from_config(&config);
         AppState {
+            idle,
+            settings,
+            settings_return: Screen::Unlock,
             deps,
             config,
             screen,
@@ -136,7 +163,10 @@ impl AppState {
             && self.open.password.is_empty()
             && self.create.password.is_empty()
             && self.create.confirm.is_empty()
-            && matches!(self.screen, Screen::Open | Screen::Create | Screen::Unlock)
+            && matches!(
+                self.screen,
+                Screen::Open | Screen::Create | Screen::Unlock | Screen::Settings
+            )
     }
 
     pub fn is_unlocked(&self) -> bool {
@@ -161,8 +191,18 @@ impl AppState {
         std::mem::take(&mut self.wipe_requested)
     }
 
-    /// Timers (idle lock etc.) arrive with a later feature.
-    pub fn tick(&mut self) {}
+    /// Timers. The idle lock comes first, before any other pending work.
+    pub fn tick(&mut self) {
+        self.check_idle();
+    }
+
+    /// Lock when the idle timeout has passed. The timer is armed only while
+    /// a session exists.
+    fn check_idle(&mut self) {
+        if self.session.is_some() && self.idle.expired(self.deps.clock.now()) {
+            self.lock_now();
+        }
+    }
 
     /// Called when the application closes.
     pub fn on_exit(&mut self) {
@@ -170,8 +210,18 @@ impl AppState {
     }
 
     pub fn dispatch(&mut self, action: Action) {
+        // A late action after a long gap must not be applied to the vault.
+        self.check_idle();
         self.notice = None;
         match action {
+            Action::Activity => {
+                if self.session.is_some() {
+                    self.idle.touch(self.deps.clock.now());
+                }
+            }
+            Action::ShowSettings => self.show_settings(),
+            Action::CloseSettings => self.close_settings(),
+            Action::SaveSettings => self.save_settings(),
             Action::SubmitOpen => self.submit_open(),
             Action::SubmitCreate => self.submit_create(),
             Action::Lock => {
@@ -244,7 +294,7 @@ impl AppState {
                 self.wipe_requested = true;
             }
             Screen::Open | Screen::Unlock => self.clear_open_password(),
-            Screen::Browse => {}
+            Screen::Browse | Screen::Settings => {}
         }
     }
 
@@ -322,6 +372,7 @@ impl AppState {
         self.open.vault_path = path_text(&vault_path);
         self.config.last_vault_path = Some(vault_path);
         self.screen = Screen::Browse;
+        self.idle.touch(self.deps.clock.now());
         if let Some(store) = &self.deps.config_store {
             if let Err(e) = store.save(&self.config) {
                 self.notice = Some(e);
@@ -339,6 +390,7 @@ impl AppState {
         self.open.key_path.clear();
         self.create = CreateForm::default();
         self.notice = None;
+        self.settings = SettingsForm::from_config(&self.config);
         self.screen = Screen::Unlock;
         self.wipe_requested = true;
     }

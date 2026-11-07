@@ -29,13 +29,27 @@ impl Env {
         self.path("cfg")
     }
     pub fn state(&self) -> AppState {
+        self.state_with_clock().0
+    }
+    pub fn state_with_clock(&self) -> (AppState, ManualClock) {
+        let clock = ManualClock::new();
         std::fs::create_dir_all(self.config_dir()).unwrap();
-        AppState::new(AppDeps {
-            clock: Box::new(ManualClock::new()),
+        let state = AppState::new(AppDeps {
+            clock: Box::new(clock.clone()),
             picker: Box::new(self.picker.clone()),
             config_store: Some(ConfigStore::new(self.config_dir())),
             kdf: KdfParams::FAST_FOR_TESTS,
-        })
+        });
+        (state, clock)
+    }
+    /// An unlocked state plus its clock.
+    pub fn unlocked(&self) -> (AppState, ManualClock) {
+        let (v, k) = self.make_vault("u.opw", "u.key");
+        let (mut s, clock) = self.state_with_clock();
+        fill_open(&mut s, &v, &k, PW);
+        s.dispatch(onlypassword_desktop::state::Action::SubmitOpen);
+        assert!(s.is_unlocked(), "{:?}", s.notice());
+        (s, clock)
     }
     /// Make a vault and key file with the core directly.
     pub fn make_vault(&self, vault: &str, key: &str) -> (PathBuf, PathBuf) {
