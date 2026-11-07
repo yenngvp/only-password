@@ -500,7 +500,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F032-desktop-totp": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.5761,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-113559-generator-agent_F032-desktop-totp",
+          "gate_log": ".pipeline/runs/20261107-114545-gate-agent_F032-desktop-totp/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-115332-evaluator-agent_F032-desktop-totp",
+          "evaluator_summary": "Adds a pure, egui-free totp_view(cfg, unix_secs) in state/totp.rs, a TotpView held in the browse state and recomputed on every tick, a TotpCode copy path through the existing clipboard service, and a totp_section view with a countdown label and progress bar. The view is dropped on Back, on selecting another item, when the item disappears, and on lock. Invalid parameters surface the core's fixed message with no panic. I ran tests/totp.rs: all 8 tests pass. The tests load vectors from spec/vectors/totp.json, and no secret is copied into source. The one deviation is that the acceptance text expects 21 s remaining at 1111111109. The description's formula gives 1, because 1111111109 % 30 = 29. The generator implemented the formula, which is correct, and recorded the conflict in spec-issues.md. The owner should fix the acceptance text. I did not re-run the gate. It was reported as already passed.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 21.2844
+  "total_cost_usd": 21.8605
 }
