@@ -530,7 +530,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F034-desktop-generator": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.7067,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-121934-generator-agent_F034-desktop-generator",
+          "gate_log": ".pipeline/runs/20261107-122941-gate-agent_F034-desktop-generator/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-123732-evaluator-agent_F034-desktop-generator",
+          "evaluator_summary": "Adds state::generator (GeneratorState, actions, Screen::Generator), a generator panel (edit side panel and standalone screen), and 12 tests. Values come only from core generate_password/generate_passphrase. The value is a core SecretString held inside the session, so lock drops it, and it is also dropped on discard, use, close, draft save/cancel and failed generation. UseGenerated writes through the draft's SecretBuf and returns NoSelection with no draft. CopyGenerated uses the clipboard service. I ran `cargo test -p onlypassword-desktop --test generator`: 12/12 pass. I did not re-run the gate; it is reported as passed. Remaining points are minor.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 22.883
+  "total_cost_usd": 23.5897
 }
