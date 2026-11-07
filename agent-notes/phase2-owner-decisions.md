@@ -44,3 +44,24 @@ Open items for the owner after the run: the planner's additions to
 `agent-notes/dep-requests.md` if present, and the pilot-era items already listed
 there (F008 error variant, wordlist, Argon2 p=4 on iOS).
 - deny.toml: added Ubuntu-font-1.0 after the first F024 gate run rejected epaint_default_fonts on it (2026-11-07 07:51).
+
+## Outcome (2026-11-07 14:10)
+
+All 14 phase-2 features (F024–F037) passed the gate and the evaluator and are
+merged on main. 15 generator attempts in total: F024 lost two attempts to the
+licence id above and to a commit made on main during its session (owner error),
+F037 was sent back once by the evaluator (its read-back compared stored data with
+itself; fixed). Phase-2 spend: $1.41 planning + $9.85 features.
+
+Items the agents flagged for the owner (details in agent-notes/spec-issues.md):
+- architecture.md §7.2/7.8 describe the egui 0.36 API; egui 0.37 changed
+  `CentralPanel::show` and `eframe::App::ui`. The code follows 0.37.
+- F032 acceptance lists remaining seconds "21" for unix time 1111111109, but the
+  normative formula gives 1. Code and test follow the formula.
+- The architecture denylist bans `tokio` in Cargo.lock, but a wasm-only path
+  (wasm-bindgen-futures via winit/rfd) lists it; the hardening test tolerates
+  exactly that shape. Consider rewording the denylist to the three desktop targets.
+- The core's `Error::Io` Display is "i/o error", which contains a `/`; the
+  "no path separator in messages" test exempts that one word.
+- Not done by the pipeline: running the app on Windows and macOS, packaging,
+  signing. The gate proves Linux build+tests and cross `cargo check` only.
