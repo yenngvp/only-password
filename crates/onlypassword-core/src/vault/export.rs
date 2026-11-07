@@ -1,6 +1,6 @@
 //! Encrypted export and import (CS §8, §9 export table, §10).
 
-use super::{max_records, Vault};
+use super::{max_records, summary_of, Vault};
 use crate::crypto::aead::{self, AeadKey};
 use crate::crypto::hkdf::{self, INFO_EXPORT};
 use crate::crypto::kdf::{self, KdfParams};
@@ -350,7 +350,13 @@ impl Vault {
         if records.len() > max_records() {
             return Err(Error::LimitExceeded);
         }
-        self.commit(records)?;
+        let extra = parsed
+            .entries
+            .iter()
+            .map(|(id, revision, item, _, u)| summary_of(id, item, *revision, *u))
+            .collect();
+        let index = self.index.with_all(extra);
+        self.commit_with_index(records, index)?;
         Ok(n)
     }
 }

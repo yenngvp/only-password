@@ -7,6 +7,8 @@ use crate::item::{Item, ItemId, ItemKind};
 use crate::secret::SecretString;
 use crate::{rng, seal, storage, Error, Result};
 mod export;
+mod index;
+pub use index::ItemIndex;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -35,6 +37,9 @@ pub struct Vault {
     vk: VaultKey,
     k_iw: ItemWrapKey,
     clock: Box<dyn Clock>,
+    index: ItemIndex,
+    #[cfg(any(test, feature = "test-hooks"))]
+    decrypts: std::sync::atomic::AtomicU64,
 }
 
 impl std::fmt::Debug for Vault {
@@ -89,14 +94,43 @@ impl Vault {
         Self::from_parts(path, file, vk)
     }
 
+    /// Builds the index with one decryption pass over all records.
     fn from_parts(path: &Path, file: VaultFile, vk: VaultKey) -> Result<Vault> {
-        Ok(Vault {
+        let mut v = Vault {
             path: path.to_path_buf(),
             k_iw: vk.item_wrap_key()?,
             file,
             vk,
             clock: Box::new(SystemClock),
-        })
+            index: ItemIndex::empty(),
+            #[cfg(any(test, feature = "test-hooks"))]
+            decrypts: std::sync::atomic::AtomicU64::new(0),
+        };
+        let mut sums = Vec::with_capacity(v.file.records.len());
+        for rec in &v.file.records {
+            let s = v.open_at(rec)?;
+            sums.push(summary_of(&s.id, &s.item, s.revision, s.updated_ms));
+        }
+        v.index = ItemIndex::from_summaries(sums);
+        Ok(v)
+    }
+
+    /// The item index, kept in step with the file image (REQ-IDX-002).
+    pub fn index(&self) -> &ItemIndex {
+        &self.index
+    }
+
+    /// Number of record decryptions performed by this vault so far.
+    #[doc(hidden)]
+    #[cfg(any(test, feature = "test-hooks"))]
+    pub fn decrypt_count(&self) -> u64 {
+        self.decrypts.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn note_decrypt(&self) {
+        #[cfg(any(test, feature = "test-hooks"))]
+        self.decrypts
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// CS §9 order: read, parse, derive MK, unwrap VK, verify trailer. No password minimum.
@@ -153,6 +187,18 @@ pub struct ItemSummary {
     pub updated_ms: u64,
 }
 
+fn summary_of(id: &ItemId, it: &Item, revision: u64, updated_ms: u64) -> ItemSummary {
+    ItemSummary {
+        id: id.clone(),
+        kind: it.kind,
+        title: it.title.clone(),
+        username: it.username.clone(),
+        urls: it.urls.clone(),
+        revision,
+        updated_ms,
+    }
+}
+
 #[cfg(not(test))]
 fn max_records() -> usize {
     MAX_RECORDS as usize
@@ -185,6 +231,7 @@ impl Vault {
     }
 
     fn open_at(&self, rec: &Record) -> Result<StoredItem> {
+        self.note_decrypt();
         let (item, created_ms, updated_ms) =
             seal::open_record(&self.k_iw, &self.file.header.vault_id, rec)?;
         Ok(StoredItem {
@@ -206,7 +253,7 @@ impl Vault {
     }
 
     /// Build the complete new image, check limits, write atomically, then update memory.
-    fn commit(&mut self, records: Vec<Record>) -> Result<()> {
+    fn commit_with_index(&mut self, records: Vec<Record>, index: ItemIndex) -> Result<()> {
         if records.len() > max_records() {
             return Err(Error::LimitExceeded);
         }
@@ -217,7 +264,21 @@ impl Vault {
         let parsed = VaultFile::parse(&img)?;
         self.persist(&img)?;
         self.file = parsed;
+        self.index = index;
         Ok(())
+    }
+
+    /// Test helper: commit raw records, rebuilding the index from the records that decrypt.
+    #[cfg(test)]
+    fn commit(&mut self, records: Vec<Record>) -> Result<()> {
+        let mut sums = Vec::new();
+        for rec in &records {
+            // Tests commit deliberately corrupt records; those get no index entry.
+            if let Ok(s) = self.open_at(rec) {
+                sums.push(summary_of(&s.id, &s.item, s.revision, s.updated_ms));
+            }
+        }
+        self.commit_with_index(records, ItemIndex::from_summaries(sums))
     }
 
     /// Add an item; returns its new random id (revision 1, created = updated = now).
@@ -240,7 +301,8 @@ impl Vault {
         )?;
         let mut records = self.file.records.clone();
         records.insert(pos, rec);
-        self.commit(records)?;
+        let index = self.index.with(summary_of(&id, item, 1, now));
+        self.commit_with_index(records, index)?;
         Ok(id)
     }
 
@@ -269,14 +331,16 @@ impl Vault {
         )?;
         let mut records = self.file.records.clone();
         *records.get_mut(i).ok_or(Error::NotFound)? = rec;
-        self.commit(records)
+        let index = self.index.with(summary_of(id, item, revision, updated_ms));
+        self.commit_with_index(records, index)
     }
 
     pub fn delete(&mut self, id: &ItemId) -> Result<()> {
         let i = self.index_of(id).map_err(|_| Error::NotFound)?;
         let mut records = self.file.records.clone();
         records.remove(i);
-        self.commit(records)
+        let index = self.index.without(id);
+        self.commit_with_index(records, index)
     }
 
     fn summaries(&self, query: Option<&str>) -> Result<Vec<ItemSummary>> {
@@ -299,15 +363,7 @@ impl Vault {
                     continue;
                 }
             }
-            out.push(ItemSummary {
-                id: s.id.clone(),
-                kind: it.kind,
-                title: it.title.clone(),
-                username: it.username.clone(),
-                urls: it.urls.clone(),
-                revision: s.revision,
-                updated_ms: s.updated_ms,
-            });
+            out.push(summary_of(&s.id, it, s.revision, s.updated_ms));
         }
         out.sort_by_key(|a| (a.title.to_lowercase(), a.id.0));
         Ok(out)
@@ -417,6 +473,7 @@ impl Vault {
         let records = if rotate {
             let mut out = Vec::with_capacity(self.file.records.len());
             for rec in &self.file.records {
+                self.note_decrypt();
                 let (item, created, updated) = seal::open_record(&self.k_iw, &h.vault_id, rec)?;
                 out.push(seal::seal_item(
                     &new_kiw,
@@ -438,6 +495,8 @@ impl Vault {
         }
         let parsed = VaultFile::parse(&img)?;
         self.persist(&img)?;
+        // Titles, usernames and URLs are unchanged by a rekey, so the index stays as is;
+        // it is only replaced after the write succeeded, together with the file.
         self.file = parsed;
         self.vk = new_vk;
         self.k_iw = new_kiw;
@@ -447,6 +506,8 @@ impl Vault {
 
 #[cfg(test)]
 mod export_tests;
+#[cfg(test)]
+mod index_tests;
 #[cfg(test)]
 mod item_tests;
 #[cfg(test)]
