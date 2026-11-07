@@ -575,7 +575,30 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F037-desktop-e2e": {
+      "status": "passed",
+      "attempts": 2,
+      "cost_usd": 0.8003,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-132731-generator-agent_F037-desktop-e2e",
+          "gate_log": ".pipeline/runs/20261107-133741-gate-agent_F037-desktop-e2e/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-134609-evaluator-agent_F037-desktop-e2e",
+          "evaluator_summary": "Adds crates/onlypassword-desktop/tests/e2e.rs, one headless scenario with real KDF defaults, ManualClock, MemoryClipboard, ScriptedPicker and tempdir config. It follows the phase-2 steps in order. I ran it: it passes in about 6 s in the dev profile without a display. Idle lock, the Authentication errors, the TOTP vector from spec/vectors/totp.json and the final sentinel scan are all asserted. It fails on one point. The read-back step never compares the items with the values that were added, so the 'compare every field with what was added' requirement is not met.",
+          "outcome": "evaluator_rejected"
+        },
+        {
+          "attempt": 2,
+          "generator_run": ".pipeline/runs/20261107-134925-generator-agent_F037-desktop-e2e",
+          "gate_log": ".pipeline/runs/20261107-135836-gate-agent_F037-desktop-e2e/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-140709-evaluator-agent_F037-desktop-e2e",
+          "evaluator_summary": "Adds only crates/onlypassword-desktop/tests/e2e.rs and an agent note. One scenario test drives AppState with KdfParams::DEFAULT, ManualClock, MemoryClipboard, ScriptedPicker and tempdir config dirs, with kittest used for the manual lock, the unlock and the note title entry. It follows the phase-2 steps in order: create, add a login (TOTP SHA-1/8 digits, plain and hidden field) and a note, lock, unlock, read back, idle lock, change password with rotate, old password gives Authentication, export, fresh vault, import (own key gives Authentication, first key succeeds), compare, final lock and sentinel scans. Expected values come from the test's own constants, and the TOTP code comes from spec/vectors/totp.json (SHA1, t=1111109 vector, 07081804). I ran the test myself and it passed in 2.7s in the dev profile, with no display. I did not re-run the gate or the cross-target checks and relied on the stated gate pass. No protected paths or dependencies were touched. No blocker or major findings.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 25.3019
+  "total_cost_usd": 26.1022
 }
