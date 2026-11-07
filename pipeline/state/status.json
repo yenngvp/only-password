@@ -485,7 +485,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F031-desktop-clipboard": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.7211,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-105126-generator-agent_F031-desktop-clipboard",
+          "gate_log": ".pipeline/runs/20261107-111615-gate-agent_F031-desktop-clipboard/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-112359-evaluator-agent_F031-desktop-clipboard",
+          "evaluator_summary": "Adds clipboard.rs (ClipboardBackend, ArboardBackend with cfg-gated history exclusion, MemoryClipboard with counters/sensitive/failure switch, ClipboardService holding only a [u8;32] SHA-256 digest and a deadline), AppDeps.clipboard, Action::Copy, Copy buttons, tick polling, clear on lock/idle/exit, and runtime timeout update that leaves a pending deadline alone. I ran the desktop crate tests (all pass, including 11 new in tests/clipboard.rs) and cargo check for x86_64-pc-windows-msvc and aarch64-apple-darwin (both succeed). Each acceptance criterion has a matching test or code path. Only minor findings remain.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 20.5633
+  "total_cost_usd": 21.2844
 }

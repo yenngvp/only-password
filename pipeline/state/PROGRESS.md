@@ -121,3 +121,7 @@ Merged 2026-11-07 after 1 attempt(s), $0.76. Evaluator: Adds IdleTimer, Settings
 ## F030-desktop-browse: Desktop: browse, search, detail and masked fields
 
 Merged 2026-11-07 after 1 attempt(s), $0.62. Evaluator: Adds browse/search/detail/reveal state (state/browse.rs) and views. Rows are copied from Vault::index() into a zeroizing Row; search uses the core index search; reveal state clears on Select, Back and Lock; masked fields draw a fixed 8-bullet placeholder; Debug of Row/Session/Detail/BrowseState is redacted. I ran the desktop crate tests and all passed. The tests compare against core Vault::list/search, check the accessibility tree for sentinels before and after Reveal, and cover lock cleanliness. I did not rerun the gate (already passed).
+
+## F031-desktop-clipboard: Desktop: clipboard service with timed clear
+
+Merged 2026-11-07 after 1 attempt(s), $0.72. Evaluator: Adds clipboard.rs (ClipboardBackend, ArboardBackend with cfg-gated history exclusion, MemoryClipboard with counters/sensitive/failure switch, ClipboardService holding only a [u8;32] SHA-256 digest and a deadline), AppDeps.clipboard, Action::Copy, Copy buttons, tick polling, clear on lock/idle/exit, and runtime timeout update that leaves a pending deadline alone. I ran the desktop crate tests (all pass, including 11 new in tests/clipboard.rs) and cargo check for x86_64-pc-windows-msvc and aarch64-apple-darwin (both succeed). Each acceptance criterion has a matching test or code path. Only minor findings remain.
