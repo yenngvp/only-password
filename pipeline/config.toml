@@ -3,7 +3,7 @@
 
 [limits]
 max_attempts = 3      # generator attempts per feature before it is marked blocked
-max_run_usd = 60      # one `run.py build` invocation stops starting new work past this
+max_run_usd = 150     # one `run.py build` invocation stops starting new work past this
 
 [container]
 memory = "8g"
@@ -24,16 +24,16 @@ model = ""
 effort = ""
 
 [generator]
-budget_usd = 10
-timeout_min = 60
+budget_usd = 15
+timeout_min = 90
 model = ""
 effort = ""
 
 [evaluator]
 budget_usd = 5
-timeout_min = 30
+timeout_min = 45
 model = ""
 effort = ""
 
 [gate]
-timeout_min = 30
+timeout_min = 45

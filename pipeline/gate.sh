@@ -56,6 +56,17 @@ step "lints"
 cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings \
   || fail "clippy reported warnings"
 
+step "portability: cargo check for the other desktop targets"
+for target in x86_64-pc-windows-msvc aarch64-apple-darwin; do
+  if rustup target list --installed 2>/dev/null | grep -qx "${target}"; then
+    cargo check --workspace --all-targets --all-features --locked --offline --target "${target}" \
+      || fail "cargo check failed for target ${target}"
+    echo "ok: ${target}"
+  else
+    echo "skipped: ${target} is not installed in this image"
+  fi
+done
+
 step "tests"
 cargo test --workspace --all-features --locked --offline || fail "tests failed"
 

@@ -13,9 +13,13 @@ ARG CARGO_DENY_SHA256=9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca82
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git jq ripgrep \
+      pkg-config libwayland-dev libxkbcommon-dev libgtk-3-dev libgl1-mesa-dev \
+      libegl1-mesa-dev libfontconfig1-dev libssl-dev \
  && rm -rf /var/lib/apt/lists/*
 
-RUN rustup component add rustfmt clippy
+# Phase 2 (desktop app): the gate builds on Linux and cross-checks these targets.
+RUN rustup component add rustfmt clippy \
+ && rustup target add x86_64-pc-windows-msvc aarch64-apple-darwin
 
 # Node is only here to run Claude Code.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
