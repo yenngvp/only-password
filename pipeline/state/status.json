@@ -366,9 +366,9 @@
       ]
     },
     "F024-desktop-skeleton": {
-      "status": "in_progress",
+      "status": "blocked",
       "attempts": 3,
-      "cost_usd": 0.3622,
+      "cost_usd": 0.4442,
       "history": [
         {
           "attempt": 1,
@@ -380,9 +380,15 @@
           "attempt": 2,
           "generator_run": ".pipeline/runs/20261107-075121-generator-agent_F024-desktop-skeleton",
           "outcome": "no_commits"
+        },
+        {
+          "attempt": 3,
+          "generator_run": ".pipeline/runs/20261107-075147-generator-agent_F024-desktop-skeleton",
+          "outcome": "boundary_violation"
         }
-      ]
+      ],
+      "pending_feedback": "The driver rejected the branch because it breaks the boundary rules:\n- agent/F024-desktop-skeleton is not built on top of main (merge origin/main into it; do not rebase)\nUndo those changes on this branch (for a file that exists on main: `git checkout origin/main -- <path>`; for a new file: `git rm`), then commit."
     }
   },
-  "total_cost_usd": 16.616
+  "total_cost_usd": 16.698
 }
