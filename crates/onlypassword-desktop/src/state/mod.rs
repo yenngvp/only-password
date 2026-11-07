@@ -8,12 +8,15 @@ use onlypassword_core::crypto::keys::SecretKey;
 use onlypassword_core::{keyfile, ItemId, SecretString, Vault};
 
 pub mod browse;
+pub mod edit;
+pub use edit::{Draft, DraftField};
 pub mod idle;
 pub use browse::{Detail, FieldRef, Row};
 pub mod settings;
 pub mod totp;
 pub use totp::{totp_view, TotpView};
 
+use onlypassword_core::{ItemKind, TotpAlgorithm};
 use std::time::Duration;
 
 use crate::clipboard::{ClipboardBackend, ClipboardService};
@@ -51,6 +54,8 @@ pub enum Screen {
     Unlock,
     Browse,
     Detail(ItemId),
+    /// Add (`None`) or edit (`Some`) an item.
+    Edit(Option<ItemId>),
     Settings,
 }
 
@@ -81,8 +86,32 @@ pub enum Action {
     ToggleReveal(FieldRef),
     /// Put a field of the open item on the clipboard.
     Copy(FieldRef),
-    /// Leave the detail screen.
+    /// Leave the detail screen (or cancel an open draft).
     Back,
+    /// Start a draft for a new item (from Browse).
+    BeginAdd(ItemKind),
+    /// Start a draft from the open item (from Detail).
+    BeginEdit,
+    SaveDraft,
+    CancelDraft,
+    RequestDelete,
+    ConfirmDelete,
+    CancelDelete,
+    SetKind(ItemKind),
+    SetTitle(String),
+    SetUsername(String),
+    SetUrl(usize, String),
+    AddUrl,
+    RemoveUrl(usize),
+    SetTotpAlgorithm(TotpAlgorithm),
+    SetTotpDigits(u8),
+    SetTotpPeriod(u32),
+    AddField,
+    RemoveField(usize),
+    SetFieldName(usize, String),
+    SetFieldHidden(usize, bool),
+    /// Show or hide one secret field of the draft form.
+    ToggleDraftReveal(FieldRef),
     /// User input happened: restart the idle timer.
     Activity,
 }
@@ -270,8 +299,43 @@ impl AppState {
             | Action::Select(_)
             | Action::ToggleReveal(_)
             | Action::Copy(_)
-            | Action::Back => self.browse_action(action),
-            Action::ShowSettings => self.show_settings(),
+            | Action::Back => {
+                // Navigating away from the edit form drops the draft.
+                if matches!(self.screen, Screen::Edit(_)) {
+                    self.drop_draft();
+                    if action == Action::Back {
+                        return;
+                    }
+                }
+                self.browse_action(action)
+            }
+            Action::BeginAdd(_)
+            | Action::BeginEdit
+            | Action::SaveDraft
+            | Action::CancelDraft
+            | Action::RequestDelete
+            | Action::ConfirmDelete
+            | Action::CancelDelete
+            | Action::SetKind(_)
+            | Action::SetTitle(_)
+            | Action::SetUsername(_)
+            | Action::SetUrl(..)
+            | Action::AddUrl
+            | Action::RemoveUrl(_)
+            | Action::SetTotpAlgorithm(_)
+            | Action::SetTotpDigits(_)
+            | Action::SetTotpPeriod(_)
+            | Action::AddField
+            | Action::RemoveField(_)
+            | Action::SetFieldName(..)
+            | Action::SetFieldHidden(..)
+            | Action::ToggleDraftReveal(_) => self.edit_action(action),
+            Action::ShowSettings => {
+                if matches!(self.screen, Screen::Edit(_)) {
+                    self.drop_draft();
+                }
+                self.show_settings()
+            }
             Action::CloseSettings => self.close_settings(),
             Action::SaveSettings => self.save_settings(),
             Action::SubmitOpen => self.submit_open(),
@@ -346,7 +410,7 @@ impl AppState {
                 self.wipe_requested = true;
             }
             Screen::Open | Screen::Unlock => self.clear_open_password(),
-            Screen::Browse | Screen::Detail(_) | Screen::Settings => {}
+            Screen::Browse | Screen::Detail(_) | Screen::Edit(_) | Screen::Settings => {}
         }
     }
 

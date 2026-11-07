@@ -3,7 +3,7 @@
 use crate::config::Theme;
 use crate::secret_buf::SecretBuf;
 use crate::state::{Action, AppState, FieldRef, Screen};
-use onlypassword_core::ItemKind;
+use onlypassword_core::{ItemKind, TotpAlgorithm};
 
 /// Draw the current screen and dispatch what the user did.
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
@@ -19,6 +19,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             Screen::Unlock => unlock(ui, state),
             Screen::Browse => browse(ui, state),
             Screen::Detail(_) => detail(ui, state),
+            Screen::Edit(_) => edit(ui, state),
             Screen::Settings => settings(ui, state),
         };
         if let Some(action) = action {
@@ -60,10 +61,20 @@ fn path_row(ui: &mut egui::Ui, label: &str, text: &mut String) -> bool {
 
 /// A labelled masked secret field editing the `SecretBuf` in place.
 pub fn secret_edit(ui: &mut egui::Ui, label: &str, buf: &mut SecretBuf) -> egui::Response {
+    secret_edit_with(ui, label, buf, false)
+}
+
+/// Like `secret_edit`, with the text shown in the clear when `revealed`.
+pub fn secret_edit_with(
+    ui: &mut egui::Ui,
+    label: &str,
+    buf: &mut SecretBuf,
+    revealed: bool,
+) -> egui::Response {
     ui.horizontal(|ui| {
         let l = ui.label(label);
         let mut adapter = SecretAdapter(buf);
-        ui.add(egui::TextEdit::singleline(&mut adapter).password(true))
+        ui.add(egui::TextEdit::singleline(&mut adapter).password(!revealed))
             .labelled_by(l.id)
     })
     .inner
@@ -204,6 +215,12 @@ pub fn browse(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
             }
         });
     }
+    if ui.button("Add Login").clicked() {
+        action = Some(Action::BeginAdd(ItemKind::Login));
+    }
+    if ui.button("Add Note").clicked() {
+        action = Some(Action::BeginAdd(ItemKind::Note));
+    }
     if ui.button("Settings").clicked() {
         action = Some(Action::ShowSettings);
     }
@@ -338,11 +355,221 @@ pub fn detail(ui: &mut egui::Ui, state: &AppState) -> Option<Action> {
             }
         }
     }
+    if let Some(stored) = state.selected() {
+        if state.delete_pending() {
+            ui.label(format!("Delete \"{}\"?", stored.item.title));
+            if ui.button("Confirm delete").clicked() {
+                action = Some(Action::ConfirmDelete);
+            }
+            if ui.button("Cancel delete").clicked() {
+                action = Some(Action::CancelDelete);
+            }
+        } else {
+            if ui.button("Edit").clicked() {
+                action = Some(Action::BeginEdit);
+            }
+            if ui.button("Delete").clicked() {
+                action = Some(Action::RequestDelete);
+            }
+        }
+    }
     if ui.button("Back").clicked() {
         action = Some(Action::Back);
     }
     if ui.button("Lock").clicked() {
         action = Some(Action::Lock);
+    }
+    action
+}
+
+/// A labelled plain-text field of the edit form; returns the new text when changed.
+fn text_field(ui: &mut egui::Ui, label: &str, current: &str) -> Option<String> {
+    let mut text = current.to_owned();
+    let changed = ui
+        .horizontal(|ui| {
+            let l = ui.label(label);
+            ui.add(egui::TextEdit::singleline(&mut text))
+                .labelled_by(l.id)
+                .changed()
+        })
+        .inner;
+    changed.then_some(text)
+}
+
+/// A masked draft field with its per-field Reveal/Hide toggle.
+fn draft_secret(
+    ui: &mut egui::Ui,
+    state: &mut AppState,
+    label: &str,
+    field: FieldRef,
+    pick: impl Fn(&mut crate::state::Draft) -> &mut SecretBuf,
+    action: &mut Option<Action>,
+) {
+    let Some(d) = state.draft_mut() else {
+        return;
+    };
+    let shown = d.revealed.contains(&field);
+    secret_edit_with(ui, label, pick(d), shown);
+    let verb = if shown { "Hide" } else { "Reveal" };
+    if ui.button(format!("{verb} {label}")).clicked() {
+        *action = Some(Action::ToggleDraftReveal(field));
+    }
+}
+
+/// Edit form for a new or existing item. Notes drafts show only title and notes.
+pub fn edit(ui: &mut egui::Ui, state: &mut AppState) -> Option<Action> {
+    let mut action = None;
+    let d = state.draft()?;
+    let kind = d.kind;
+    let adding = matches!(state.screen(), Screen::Edit(None));
+    ui.label(match (adding, kind) {
+        (true, ItemKind::Login) => "Add login",
+        (true, ItemKind::Note) => "Add note",
+        (false, _) => "Edit item",
+    });
+    if adding {
+        ui.horizontal(|ui| {
+            if ui
+                .selectable_label(kind == ItemKind::Login, "Login")
+                .clicked()
+            {
+                action = Some(Action::SetKind(ItemKind::Login));
+            }
+            if ui
+                .selectable_label(kind == ItemKind::Note, "Note")
+                .clicked()
+            {
+                action = Some(Action::SetKind(ItemKind::Note));
+            }
+        });
+    }
+    let title = d.title.clone();
+    if let Some(t) = text_field(ui, "Title", &title) {
+        action = Some(Action::SetTitle(t));
+    }
+    if kind == ItemKind::Login {
+        let (username, urls) = (d.username.clone(), d.urls.clone());
+        let (alg, digits, period) = (d.totp_algorithm, d.totp_digits, d.totp_period);
+        let fields: Vec<(String, bool)> = d
+            .fields
+            .iter()
+            .map(|f| (f.name.clone(), f.hidden))
+            .collect();
+        if let Some(u) = text_field(ui, "Username", &username) {
+            action = Some(Action::SetUsername(u));
+        }
+        draft_secret(
+            ui,
+            state,
+            "Password",
+            FieldRef::Password,
+            |d| &mut d.password,
+            &mut action,
+        );
+        for (i, u) in urls.iter().enumerate() {
+            ui.push_id(("url", i), |ui| {
+                if let Some(t) = text_field(ui, &format!("URL {}", i + 1), u) {
+                    action = Some(Action::SetUrl(i, t));
+                }
+                if ui.button(format!("Remove URL {}", i + 1)).clicked() {
+                    action = Some(Action::RemoveUrl(i));
+                }
+            });
+        }
+        if ui.button("Add URL").clicked() {
+            action = Some(Action::AddUrl);
+        }
+        draft_secret(
+            ui,
+            state,
+            "Notes",
+            FieldRef::Notes,
+            |d| &mut d.notes,
+            &mut action,
+        );
+        draft_secret(
+            ui,
+            state,
+            "TOTP secret",
+            FieldRef::TotpSecret,
+            |d| &mut d.totp_secret,
+            &mut action,
+        );
+        ui.horizontal(|ui| {
+            ui.label("TOTP algorithm");
+            for (a, name) in [
+                (TotpAlgorithm::Sha1, "SHA-1"),
+                (TotpAlgorithm::Sha256, "SHA-256"),
+                (TotpAlgorithm::Sha512, "SHA-512"),
+            ] {
+                if ui.selectable_label(alg == a, name).clicked() {
+                    action = Some(Action::SetTotpAlgorithm(a));
+                }
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("TOTP digits");
+            for n in 6u8..=8 {
+                if ui.selectable_label(digits == n, n.to_string()).clicked() {
+                    action = Some(Action::SetTotpDigits(n));
+                }
+            }
+        });
+        if let Some(t) = text_field(ui, "TOTP period (seconds)", &period.to_string()) {
+            // Unparsable text maps to 0, which the core rejects on save.
+            action = Some(Action::SetTotpPeriod(t.trim().parse().unwrap_or(0)));
+        }
+        for (i, (name, hidden)) in fields.iter().enumerate() {
+            ui.push_id(("field", i), |ui| {
+                if let Some(t) = text_field(ui, &format!("Field {} name", i + 1), name) {
+                    action = Some(Action::SetFieldName(i, t));
+                }
+                let label = format!("Field {} value", i + 1);
+                if let Some(d) = state.draft_mut() {
+                    let shown = !*hidden || d.revealed.contains(&FieldRef::Custom(i));
+                    if let Some(f) = d.fields.get_mut(i) {
+                        secret_edit_with(ui, &label, &mut f.value, shown);
+                    }
+                }
+                let mut h = *hidden;
+                if ui
+                    .checkbox(&mut h, format!("Hide field {}", i + 1))
+                    .changed()
+                {
+                    action = Some(Action::SetFieldHidden(i, h));
+                }
+                if *hidden {
+                    let shown = state
+                        .draft()
+                        .is_some_and(|d| d.revealed.contains(&FieldRef::Custom(i)));
+                    let verb = if shown { "Hide" } else { "Reveal" };
+                    if ui.button(format!("{verb} {label}")).clicked() {
+                        action = Some(Action::ToggleDraftReveal(FieldRef::Custom(i)));
+                    }
+                }
+                if ui.button(format!("Remove field {}", i + 1)).clicked() {
+                    action = Some(Action::RemoveField(i));
+                }
+            });
+        }
+        if ui.button("Add field").clicked() {
+            action = Some(Action::AddField);
+        }
+    } else {
+        draft_secret(
+            ui,
+            state,
+            "Notes",
+            FieldRef::Notes,
+            |d| &mut d.notes,
+            &mut action,
+        );
+    }
+    if ui.button("Save").clicked() {
+        action = Some(Action::SaveDraft);
+    }
+    if ui.button("Cancel").clicked() {
+        action = Some(Action::CancelDraft);
     }
     action
 }
