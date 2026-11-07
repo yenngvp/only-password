@@ -11,6 +11,7 @@ Built `crates/onlypassword-desktop` (lib `onlypassword_desktop`, bin `onlypasswo
 
 ## Outcomes
 - `cargo test -p onlypassword-desktop`: passes.
-- **Licence: FAILED** – `Ubuntu-font-1.0` (epaint_default_fonts) is not in pipeline/deny.toml. See spec-issues.md. Gate stops at cargo-deny, so **GATE PASSED was not reached** and the portability step (windows-msvc, aarch64-apple-darwin; both targets are installed) was **not run**. Next agent: after the owner fixes deny.toml, run the gate and fill in the cross-target result here.
+- **Licence (attempt 3): ok.** The gate's cargo-deny now reports `advisories ok, bans ok, licenses ok, sources ok` (the earlier Ubuntu-font-1.0 failure no longer occurs with the gate's deny.toml in /src; spec-issues.md item 1 is resolved).
+- **GATE PASSED**; portability: `ok: x86_64-pc-windows-msvc`, `ok: aarch64-apple-darwin` (both targets installed, not skipped).
 - advisories, bans, sources: ok.
 - Note: no `default_fonts` => panic at text layout, so it cannot be dropped.
