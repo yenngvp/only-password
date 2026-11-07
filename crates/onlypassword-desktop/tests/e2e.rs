@@ -229,8 +229,35 @@ fn phase2_definition_of_done() {
     h.run();
     assert_eq!(h.state().rows().len(), 2);
 
-    // Core ground truth for the later comparisons.
+    // Expected snapshots come from the test's own constants.
     let expected = {
+        let mut v = vec![
+            vec![
+                format!("{:?}", ItemKind::Login),
+                "Example login".to_owned(),
+                "alice-test".to_owned(),
+                "https://example.invalid".to_owned(),
+                LOGIN_PW.to_owned(),
+                LOGIN_NOTES.to_owned(),
+                format!("{}/{:?}/8/30", totp_secret, TotpAlgorithm::Sha1),
+                format!("Plain={PLAIN_VAL}:false"),
+                format!("Hidden={HIDDEN_VAL}:true"),
+            ],
+            vec![
+                format!("{:?}", ItemKind::Note),
+                "Secure note".to_owned(),
+                String::new(),
+                String::new(),
+                String::new(),
+                NOTE_BODY.to_owned(),
+                "no-totp".to_owned(),
+            ],
+        ];
+        v.sort();
+        v
+    };
+    // Extra cross-check: what the core vault stores equals the same snapshot.
+    let stored = {
         let key = onlypassword_core::keyfile::read(&k1).unwrap();
         let vault = Vault::unlock(&v1, &SecretString::new(MASTER.to_owned()), &key).unwrap();
         let mut v: Vec<Vec<String>> = vault
@@ -243,6 +270,7 @@ fn phase2_definition_of_done() {
         vault.lock();
         v
     };
+    assert_eq!(stored, expected, "core store matches what was added");
     assert_eq!(expected.len(), 2);
 
     // ---- 3. lock manually (button), check is_clean ----

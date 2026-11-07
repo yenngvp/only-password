@@ -13,3 +13,9 @@ lock both and scan Debug, config.json files, captured notices/info for all secre
 
 Decisions: items are compared as field snapshots (ids may differ); the key file text is read from disk
 for the scan. Runs in about 3 s in the dev profile (argon2 is built at opt-level 3).
+
+## Attempt 2
+The expected snapshots are now built from the test's own constants (kind, title, username, URL,
+password, notes, TOTP secret/SHA1/8/30, Plain and Hidden fields with hidden flags, note title and
+body). Read-back after unlock, after the password change and rotation, and in the imported vault
+is compared with them. The core-vault read stays as a cross-check only.
