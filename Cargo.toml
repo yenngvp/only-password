@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/onlypassword-core", "crates/onlypassword-cli"]
+members = ["crates/onlypassword-core", "crates/onlypassword-cli", "crates/onlypassword-desktop"]
 
 # Argon2 is far too slow unoptimized; keep the every-offset tests fast.
 [profile.dev.package.argon2]
