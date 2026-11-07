@@ -560,7 +560,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F036-desktop-hardening": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.8469,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-130415-generator-agent_F036-desktop-hardening",
+          "gate_log": ".pipeline/runs/20261107-131523-gate-agent_F036-desktop-hardening/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-132349-evaluator-agent_F036-desktop-hardening",
+          "evaluator_summary": "Adds tests/hardening_scan.rs (source scans with synthetic self-tests, Cargo.lock denylist, [dependencies] feature check) and tests/hardening_session.rs (long sentinel session, four seeded 2000-action runs, fixed Display-string list). The only src change is that Action::Lock with no session now wipes typed passwords and the clipboard, so is_clean() holds after any Lock (REQ-LOCK-003). Nothing under spec/, pipeline/ or core changed. I ran both new test files: 16 tests pass. I confirmed with cargo tree --target all that tokio in Cargo.lock is reachable only via wasm-bindgen-futures (wasm-only), so the narrow tokio tolerance is a reasonable closest-safe reading. It is recorded in spec-issues.md along with the 'i/o error' slash exemption. Both are minor deviations the owner should see.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 24.455
+  "total_cost_usd": 25.3019
 }
