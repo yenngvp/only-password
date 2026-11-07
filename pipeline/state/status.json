@@ -470,7 +470,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F030-desktop-browse": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.6178,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-102732-generator-agent_F030-desktop-browse",
+          "gate_log": ".pipeline/runs/20261107-104036-gate-agent_F030-desktop-browse/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-104809-evaluator-agent_F030-desktop-browse",
+          "evaluator_summary": "Adds browse/search/detail/reveal state (state/browse.rs) and views. Rows are copied from Vault::index() into a zeroizing Row; search uses the core index search; reveal state clears on Select, Back and Lock; masked fields draw a fixed 8-bullet placeholder; Debug of Row/Session/Detail/BrowseState is redacted. I ran the desktop crate tests and all passed. The tests compare against core Vault::list/search, check the accessibility tree for sentinels before and after Reveal, and cover lock cleanliness. I did not rerun the gate (already passed).",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 19.9455
+  "total_cost_usd": 20.5633
 }

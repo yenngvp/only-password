@@ -117,3 +117,7 @@ Merged 2026-11-07 after 1 attempt(s), $0.88. Evaluator: Adds SecretBuf, clock (U
 ## F029-desktop-idle-settings: Desktop: idle lock, settings screen and theme
 
 Merged 2026-11-07 after 1 attempt(s), $0.76. Evaluator: Adds IdleTimer, Settings screen/SaveSettings, theme application, repaint_after and activity/tick wiring in DesktopApp. Idle check runs in tick and at the start of every dispatch, so a long gap locks before queued actions (including a late Activity) are applied. SaveSettings validates through Config::validate, applies to the running timer, saves via ConfigStore and keeps the in-memory values on write failure. I ran `cargo test -p onlypassword-desktop`: all tests pass. I did not rerun the gate (it was reported passed). Everything else was verified by reading code and tests. One minor UX issue is noted.
+
+## F030-desktop-browse: Desktop: browse, search, detail and masked fields
+
+Merged 2026-11-07 after 1 attempt(s), $0.62. Evaluator: Adds browse/search/detail/reveal state (state/browse.rs) and views. Rows are copied from Vault::index() into a zeroizing Row; search uses the core index search; reveal state clears on Select, Back and Lock; masked fields draw a fixed 8-bullet placeholder; Debug of Row/Session/Detail/BrowseState is redacted. I ran the desktop crate tests and all passed. The tests compare against core Vault::list/search, check the accessibility tree for sentinels before and after Reveal, and cover lock cleanliness. I did not rerun the gate (already passed).
