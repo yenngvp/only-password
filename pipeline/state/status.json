@@ -515,7 +515,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F033-desktop-edit": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 1.0225,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-115639-generator-agent_F033-desktop-edit",
+          "gate_log": ".pipeline/runs/20261107-120805-gate-agent_F033-desktop-edit/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-121558-evaluator-agent_F033-desktop-edit",
+          "evaluator_summary": "Adds state::edit (Draft with SecretBuf secrets and redacted Debug, add/edit/delete actions), Screen::Edit, edit-form/browse/detail views, and tests/edit.rs. The draft lives in the private session BrowseState, so Lock, idle expiry and on_exit drop it. to_item normalizes the TOTP secret via the core, maps empty optionals to None, and submits only title+notes for notes. Core errors keep the draft and set the notice. Delete needs RequestDelete then ConfirmDelete. I ran `cargo test -p onlypassword-desktop` myself: all suites pass (including the 10 edit tests). The remaining findings were concluded from reading and are minor.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 21.8605
+  "total_cost_usd": 22.883
 }
