@@ -30,3 +30,7 @@ directories           # desktop only: OS per-user config directory via ProjectDi
 # ---- "exclude from history/cloud" setters on each OS (use them behind cfg if so; otherwise plain text set). (5) That `cargo check --all-targets
 # ---- --target x86_64-pc-windows-msvc` and `aarch64-apple-darwin` succeed offline with these crates (a crate that cannot be checked there is a spec
 # ---- issue: record it in agent-notes/spec-issues.md and `dep-requests.md`; do not add a dependency to work around it).
+# ---- Self-review check (docs.rs/crates.io metadata, 2026-11): eframe 0.37 has features glow, default_fonts, wayland, x11, accesskit, persistence, wgpu, clipboard, links,
+# ---- system_fonts (clipboard/links/system_fonts/web_screen_reader/wgpu/accesskit are default features and stay OFF here; the app uses its own clipboard service).
+# ---- egui_kittest 0.37 features: eframe, snapshot, video, wgpu, x11 (none needed; the default build is headless). arboard 3.7: wayland-data-control exists; default = image-data (turn off).
+# ---- rfd 0.17: gtk3, xdg-portal, wayland, common-controls-v6; default = xdg-portal + wayland (turn off, enable gtk3 on Linux only).

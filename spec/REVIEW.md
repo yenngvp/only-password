@@ -399,3 +399,17 @@ above (R-01…R-21) were already resolved and are untouched.
 - **egui text caches** cannot be zeroized by the app (residual risk 8); only mitigated by clearing egui memory.
 - **Blocking Argon2 and file dialogs** on the UI thread (residual risks 9, 10).
 - F026's read-back comparison wants a constant-time helper in the core; if the core already has one the generator should reuse it.
+
+---
+
+## Self-review (phase 2 revision, second pass)
+
+Checked and found correct, no change needed:
+- F001–F023 are byte-for-byte identical to `main:spec/features.json` (mechanical comparison); F024–F037 only appended, `depends_on` names earlier features only.
+- Every REQ id in `requirements.md` (144) is referenced by at least one feature and no feature cites an unknown id.
+- F024 is gate-complete on its own (workspace member, Cargo.lock, forbid(unsafe), headless kittest test, cross-target checks that skip only if the target is not installed).
+- Names (`AppDeps`, `AppState::new`, `Screen`, `SecretBuf`, `DesktopApp`, `ClipboardService`, `view::show`) agree between architecture.md 7.2/7.3 and features.json.
+- Nothing in phase 2 touches `crypto-spec.md`, the vectors or any pilot requirement.
+
+Fixed:
+- `approved-deps.txt`: the planner's earlier "unverified" caveat is now partly verified against crates.io metadata. Confirmed that the named features exist (eframe 0.37 `glow`/`default_fonts`/`wayland`/`x11`; arboard 3.7 `wayland-data-control`; rfd 0.17 `gtk3`), and that egui_kittest 0.37 is headless without `snapshot`/`wgpu`. Recorded which default features must stay off. The generator still checks cargo-deny and cross-target results.
