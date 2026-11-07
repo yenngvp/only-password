@@ -410,7 +410,22 @@
           "outcome": "passed"
         }
       ]
+    },
+    "F026-core-keyfile": {
+      "status": "passed",
+      "attempts": 1,
+      "cost_usd": 0.4192,
+      "history": [
+        {
+          "attempt": 1,
+          "generator_run": ".pipeline/runs/20261107-084637-generator-agent_F026-core-keyfile",
+          "gate_log": ".pipeline/runs/20261107-085510-gate-agent_F026-core-keyfile/container.log",
+          "evaluator_run": ".pipeline/runs/20261107-090206-evaluator-agent_F026-core-keyfile",
+          "evaluator_summary": "Adds pub mod keyfile (read, write_new, ct_eq, private read_from seam) and Vault::create_with_key_file, matching architecture.md 7.1 and the init order of section 5. read uses take(4097) into a Zeroizing buffer, requires UTF-8 and reuses the existing SecretKey::from_key_file_text. write_new uses create_new with mode 0600 on Unix, writes text and newline, calls sync_all and removes the file on failure. create_with_key_file checks the password first, then existence via symlink_metadata and path equality. It then generates the key, writes it, reads it back and compares with a constant-time helper, and calls create_with_key. It removes the key file on any later failure. I ran the 14 keyfile tests as a non-root user (uid 1000), so the unwritable-directory injection really executed. All 14 passed. I did not re-run the full gate or the other crates' tests. No spec, protected-path or dependency changes, and no panics or secret leaks found.",
+          "outcome": "passed"
+        }
+      ]
     }
   },
-  "total_cost_usd": 17.4661
+  "total_cost_usd": 17.8853
 }
